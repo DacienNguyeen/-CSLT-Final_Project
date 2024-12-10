@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace _CSLT__Final_Project
 {
-    internal class Main_Program
+    class App
     {
-        static void Main(string[] args)
+        static void Main3(string[] args)
         {
             DisplayMenu();
             double income = GetIncome();
@@ -30,5 +30,17 @@ namespace _CSLT__Final_Project
 
             return income;
         }
+    }
+    class Transaction
+    {
+
+    }
+    class Budget
+    {
+
+    }
+    class Savings
+    {
+
     }
 }
