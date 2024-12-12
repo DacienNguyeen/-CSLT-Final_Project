@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CsvHelper.Configuration;
 using CsvHelper;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace PersonalFinanceApp
 {
@@ -791,46 +792,52 @@ namespace PersonalFinanceApp
             Console.WriteLine("=== Budget ===");
             Console.ResetColor();
 
-            //Get Input Data from transaction
+            // Get Input Data from transactions
             List<Transaction> transactions = new List<Transaction>
-            {
-            new Transaction { ID = 1, Flow = "IN", Method = "Banking", Date = DateTime.Parse("1/12/2024 8:00"), Category = "Subsidy", Amount = 3000000 },
-            new Transaction { ID = 2, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 8:30"), Category = "Withdrawal", Amount = 500000 },
-            new Transaction { ID = 3, Flow = "IN", Method = "Cash", Date = DateTime.Parse("1/12/2024 8:30"), Category = "Withdrawal", Amount = 500000 },
-            new Transaction { ID = 4, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 9:00"), Category = "Food", Amount = 30000 },
-            new Transaction { ID = 5, Flow = "IN", Method = "E-Wallet", Date = DateTime.Parse("1/12/2024 10:00"), Category = "Loan", Amount = 28000 },
-            new Transaction { ID = 6, Flow = "OUT", Method = "Cash", Date = DateTime.Parse("1/12/2024 11:00"), Category = "Debit", Amount = 15000 },
-            new Transaction { ID = 7, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 12:00"), Category = "Food", Amount = 35000 },
-            new Transaction { ID = 8, Flow = "OUT", Method = "Cash", Date = DateTime.Parse("1/12/2024 13:00"), Category = "Snack", Amount = 20000 },
-            new Transaction { ID = 9, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 18:00"), Category = "Food", Amount = 35000 }
-            };
+    {
+        new Transaction { ID = 1, Flow = "IN", Method = "Banking", Date = DateTime.Parse("1/12/2024 8:00"), Category = "Subsidy", Amount = 3000000 },
+        new Transaction { ID = 2, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 8:30"), Category = "Withdrawal", Amount = 500000 },
+        new Transaction { ID = 3, Flow = "IN", Method = "Cash", Date = DateTime.Parse("1/12/2024 8:30"), Category = "Withdrawal", Amount = 500000 },
+        new Transaction { ID = 4, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 9:00"), Category = "Food", Amount = 30000 },
+        new Transaction { ID = 5, Flow = "IN", Method = "E-Wallet", Date = DateTime.Parse("1/12/2024 10:00"), Category = "Loan", Amount = 28000 },
+        new Transaction { ID = 6, Flow = "OUT", Method = "Cash", Date = DateTime.Parse("1/12/2024 11:00"), Category = "Debit", Amount = 15000 },
+        new Transaction { ID = 7, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 12:00"), Category = "Food", Amount = 35000 },
+        new Transaction { ID = 8, Flow = "OUT", Method = "Cash", Date = DateTime.Parse("1/12/2024 13:00"), Category = "Snack", Amount = 20000 },
+        new Transaction { ID = 9, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 18:00"), Category = "Food", Amount = 35000 }
+    };
 
             do
             {
                 int month, year;
-                while (true)
+
+                // Menu for date selection
+                Console.WriteLine("\nSelect date filter option:");
+                Console.WriteLine("1. Current month and year");
+                Console.WriteLine("2. Customize date");
+                Console.Write("Your selection: ");
+                string dateChoice = Console.ReadLine();
+
+                if (dateChoice == "1")
                 {
-                    Console.Write("Enter the month and year to filter with format MM/yyyy (leave blank for the current month): ");
-                    string input = Console.ReadLine();
-
-                    if (string.IsNullOrWhiteSpace(input))
-                    {
-                        month = DateTime.Now.Month;
-                        year = DateTime.Now.Year;
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine($"Using the current month: {month:D2}/{year}");
-                        Console.ResetColor();
-                        break;
-                    }
-
-                    if (TryParseMonthYear(input, out month, out year))
-                        break;
-
+                    // Use current month and year
+                    month = DateTime.Now.Month;
+                    year = DateTime.Now.Year;
+                }
+                else if (dateChoice == "2")
+                {
+                    // Customize date
+                    year = GetValidYear();
+                    month = GetValidMonth();
+                }
+                else
+                {
                     Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Invalid format. Please enter a valid month and year (MM/yyyy).");
+                    Console.WriteLine("Invalid choice. Please select 1 or 2.");
                     Console.ResetColor();
+                    continue;
                 }
 
+                // Filter transactions
                 var filteredTransactions = FilterByMonthYear(transactions, month, year);
 
                 if (filteredTransactions.Count == 0)
@@ -841,7 +848,11 @@ namespace PersonalFinanceApp
                 }
                 else
                 {
-                    PerformNextAction(filteredTransactions);
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"Using the current month: {month:D2}/{year}");
+                    Console.ResetColor();
+
+                    PerformNextAction(filteredTransactions, month, year);
                 }
 
                 Console.WriteLine("\nDo you want to refilter?");
@@ -854,10 +865,52 @@ namespace PersonalFinanceApp
             Console.ResetColor();
         }
 
-        static void PerformNextAction(List<Transaction> filteredTransactions)
+
+        static int GetValidYear()
         {
             while (true)
             {
+                Console.Write("Enter the year (e.g., 2024): ");
+                if (int.TryParse(Console.ReadLine(), out int year) && year > 0)
+                {
+                    return year;
+                }
+
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Invalid input. Please enter a valid year (e.g., 2024).");
+                Console.ResetColor();
+            }
+        }
+
+        static int GetValidMonth()
+        {
+            while (true)
+            {
+                Console.Write("Enter the month (1-12): ");
+                if (int.TryParse(Console.ReadLine(), out int month) && month >= 1 && month <= 12)
+                {
+                    return month;
+                }
+
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Invalid input. Please enter a valid month (1-12).");
+                Console.ResetColor();
+            }
+        }
+
+        static void PerformNextAction(List<Transaction> filteredTransactions, int month, int year)
+        {
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine("=== Budget ===");
+                Console.ResetColor();
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"Using the current month: {month:D2}/{year}");
+                Console.ResetColor();
+
                 Console.WriteLine("\nWhat would you like to do next?");
                 Console.WriteLine("1. View your budget (balances by method)");
                 Console.WriteLine("2. View your expenditure by category");
@@ -870,7 +923,8 @@ namespace PersonalFinanceApp
                     switch (choice)
                     {
                         case 1:
-                            Console.WriteLine();
+                            Console.Clear();
+                            Console.WriteLine("=== Budget (Balances by Method) ===");
                             DisplayBalancesByMethod(filteredTransactions);
                             Console.ForegroundColor = ConsoleColor.Green;
                             Console.WriteLine($"Total Balance: {FormatCurrency(CalculateTotalBalance(filteredTransactions))}");
@@ -878,15 +932,22 @@ namespace PersonalFinanceApp
                             break;
 
                         case 2:
+                            Console.Clear();
+                            Console.WriteLine("=== Expenditure by Category ===");
                             DisplayOutFlowByCategory(filteredTransactions);
                             break;
 
                         case 3:
+                            Console.Clear();
+                            Console.WriteLine("=== Income by Category ===");
                             DisplayInFlowByCategory(filteredTransactions);
                             break;
 
                         case 0:
+                            Console.Clear();
+                            Console.ForegroundColor = ConsoleColor.Green;
                             Console.WriteLine("Exiting the current menu...");
+                            Console.ResetColor();
                             return;
 
                         default:
@@ -895,6 +956,9 @@ namespace PersonalFinanceApp
                             Console.ResetColor();
                             break;
                     }
+
+                    Console.WriteLine("\nPress any key to return to the menu...");
+                    Console.ReadKey();
                 }
                 else
                 {
@@ -967,6 +1031,7 @@ namespace PersonalFinanceApp
                     Console.WriteLine("Make sure to enter an integer value!");
                     Console.ResetColor();
                 }
+                Console.Clear();
             }
         }
         static bool TryParseMonthYear(string input, out int month, out int year)

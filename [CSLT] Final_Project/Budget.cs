@@ -16,7 +16,7 @@ class Program67
         public double Amount { get; set; }
     }
 
-    static void Main8(string[] args)
+    static void Main3(string[] args)
     {
         // Sample data (based on the provided table)
         List<Transaction> transactions = new List<Transaction>
