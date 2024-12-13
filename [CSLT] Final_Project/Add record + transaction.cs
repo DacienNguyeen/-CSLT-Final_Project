@@ -17,7 +17,7 @@ namespace FinancialManager
         static GamificationManager gamificationManager = new GamificationManager();
         private static ChallengeManager challengeManager = new ChallengeManager();
         private static string transactionFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Transactions.csv");
-        static void Main(string[] args)
+        static void Main2(string[] args)
         {
             while (true)
             {
@@ -201,14 +201,14 @@ namespace FinancialManager
 
                     List<Spending> spendings = new List<Spending>
                 {
-                    // Thêm thông tin vào danh sách chi tiêu
-                    new Spending
-                    {
-                        Amount = amount,
-                        Category = category,
-                        Description = description,
-                        Date = date
-                    }
+                        // Thêm thông tin vào danh sách chi tiêu
+                        new Spending
+                        {
+                            Amount = amount,
+                            Category = category,
+                            Description = description,
+                            Date = date
+                        }
                 };
 
 
