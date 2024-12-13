@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CsvHelper.Configuration;
 using CsvHelper;
+using ConsoleTables;
+using Spectre.Console;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace PersonalFinanceApp
@@ -15,11 +17,13 @@ namespace PersonalFinanceApp
             public string Source { get; set; }
             public string Flow { get; set; } // "IN" or "OUT"
             public string Method { get; set; } // "Banking", "Cash", or "E-Wallet"
+
+            public string Session { get; set; }
             public DateTime Date { get; set; }
+
             public string Category { get; set; }
             public double Amount { get; set; }
         }
-
         public class Spending
         {
             public int ID { get; set; }
@@ -109,7 +113,7 @@ namespace PersonalFinanceApp
                         ShowHome();
                         break;
                     case "2":
-                        ShowTransactions();
+                        ShowTransactions(); // Stay in ShowTransactions loop
                         break;
                     case "3":
                         AddRecord();
@@ -129,12 +133,6 @@ namespace PersonalFinanceApp
                         Console.ResetColor();
                         break;
                 }
-
-                if (choice != "6")
-                {
-                    Console.WriteLine("\nPress any key to return to the menu...");
-                    Console.ReadKey();
-                }
             }
         }
 
@@ -147,88 +145,109 @@ namespace PersonalFinanceApp
             Console.WriteLine("Gamify your expense tracking by maintaining a streak.");
             Console.WriteLine("TODO: Add streak tracking logic using System.DateTime");
         }
-
         static void ShowTransactions()
         {
-            Console.Clear();
-            Console.WriteLine("=== View Transactions ===");
-
-            // Select a filter by time
-            Console.WriteLine("Select filter by time:");
-            Console.WriteLine("[1] This Week");
-            Console.WriteLine("[2] This Month");
-            Console.WriteLine("[3] This Year");
-            Console.WriteLine("[4] Custom Date Range");
-            Console.WriteLine("[5] Show all");
-            string filterChoice = Console.ReadLine();
-
-            DateTime startDate = DateTime.MinValue;
-            DateTime endDate = DateTime.MaxValue;
-
-            switch (filterChoice)
+            while (true)
             {
-                case "1":
-                    startDate = DateTime.Now.AddDays(-(int)DateTime.Now.DayOfWeek);
-                    endDate = DateTime.Now;
-                    break;
-                case "2":
-                    startDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
-                    endDate = DateTime.Now;
-                    break;
-                case "3":
-                    startDate = new DateTime(DateTime.Now.Year, 1, 1);
-                    endDate = DateTime.Now;
-                    break;
-                case "4":
-                    Console.Write("Enter start date (dd/mm/yyyy): ");
-                    while (!DateTime.TryParse(Console.ReadLine(), out startDate))
-                    {
-                        Console.Write("Invalid start date format. Please enter in dd/mm/yyyy format: ");
-                    }
+                Console.Clear();
+                Console.WriteLine("=== View Transactions ===");
 
-                    Console.Write("Enter end date (dd/mm/yyyy): ");
-                    while (!DateTime.TryParse(Console.ReadLine(), out endDate))
-                    {
-                        Console.Write("Invalid end date format. Please enter in dd/mm/yyyy format: ");
-                    }
+                // Select a filter by time
+                Console.WriteLine("Select filter by time:");
+                Console.WriteLine("[1] This Week");
+                Console.WriteLine("[2] This Month");
+                Console.WriteLine("[3] This Year");
+                Console.WriteLine("[4] Custom Date Range");
+                Console.WriteLine("[5] Show all");
+                Console.WriteLine("[0] Return to Main Menu"); // Add an option to return to the main menu
+
+                string filterChoice = Console.ReadLine();
+
+                if (filterChoice == "0") // Exit to NavigationBar
                     break;
-                case "5":
-                    // No filtering needed
-                    break;
-                default:
-                    Console.WriteLine("Invalid choice. Showing all records.");
-                    break;
+
+                DateTime startDate = DateTime.MinValue;
+                DateTime endDate = DateTime.MaxValue;
+
+                switch (filterChoice)
+                {
+                    case "1":
+                        startDate = DateTime.Now.AddDays(-(int)DateTime.Now.DayOfWeek);
+                        endDate = DateTime.Now.Date.AddDays(1).AddTicks(-1);
+                        break;
+                    case "2":
+                        startDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+                        endDate = DateTime.Now.Date.AddDays(1).AddTicks(-1);
+                        break;
+                    case "3":
+                        startDate = new DateTime(DateTime.Now.Year, 1, 1);
+                        endDate = new DateTime(DateTime.Now.Year, 12, 31, 23, 59, 59);
+                        break;
+                    case "4":
+                        Console.Write("Enter start date (dd/mm/yyyy): ");
+                        while (!DateTime.TryParse(Console.ReadLine(), out startDate))
+                        {
+                            Console.Write("Invalid start date format. Please enter in dd/mm/yyyy format: ");
+                        }
+
+                        Console.Write("Enter end date (dd/mm/yyyy): ");
+                        while (!DateTime.TryParse(Console.ReadLine(), out endDate))
+                        {
+                            Console.Write("Invalid end date format. Please enter in dd/mm/yyyy format: ");
+                        }
+                        endDate = endDate.Date.AddDays(1).AddTicks(-1);
+                        break;
+                    case "5":
+                        // No filtering needed
+                        break;
+                    default:
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid choice. Showing all records.");
+                        Console.ResetColor();
+                        continue; // Skip the rest of the code and re-loop
+                }
+
+                // Load transactions from all CSV files
+                var transactions = LoadTransactionsFromFiles();
+
+                // Apply the date filter and sort by date (latest to oldest)
+                var filteredTransactions = transactions
+                    .Where(t => t.Date >= startDate && t.Date <= endDate)
+                    .OrderByDescending(t => t.Date)
+                    .ToList();
+
+                // Create a Spectre.Console Table
+                var table = new Table();
+                table.Border(TableBorder.Rounded);
+                table.AddColumn("ID");
+                table.AddColumn("Session");
+                table.AddColumn("Date");
+                table.AddColumn("Flow");
+                table.AddColumn("Amount");
+                table.AddColumn("Source");
+
+                int sequentialId = 1;
+                foreach (var transaction in filteredTransactions)
+                {
+                    table.AddRow(
+                        sequentialId++.ToString(),
+                        transaction.Session,
+                        transaction.Date.ToString("dd/MM/yyyy"),
+                        transaction.Flow,
+                        $"{transaction.Amount:N0}",
+                        transaction.Source
+                    );
+                }
+
+                // Render the table
+                AnsiConsole.Clear();
+                AnsiConsole.MarkupLine($"[cyan]=== Transactions ({filteredTransactions.Count} records) ===[/]");
+                AnsiConsole.Write(table);
+
+                Console.WriteLine("\nPress any key to filter again...");
+                Console.ReadKey();
             }
-
-            // Load transactions from all CSV files
-            var transactions = LoadTransactionsFromFiles();
-
-            // Apply the date filter and sort by date (latest to oldest)
-            var filteredTransactions = transactions
-                .Where(t => t.Date >= startDate && t.Date <= endDate)
-                .OrderByDescending(t => t.Date)
-                .ToList();
-
-            // Display the transactions in a tabular format
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"=== Transactions ({filteredTransactions.Count} records) ===");
-            Console.ResetColor();
-
-            Console.WriteLine("ID | Session  | Date       | Flow | Amount    | Source");
-            Console.WriteLine("---|----------|------------|------|-----------|--------");
-
-            int sequentialId = 1;
-            foreach (var transaction in filteredTransactions)
-            {
-                string session = GetSessionOfDay(transaction.Date);
-                Console.WriteLine($"{sequentialId++,3} | {session,-8} | {transaction.Date:dd/MM/yyyy} | {transaction.Flow,-4} | {transaction.Amount,9:N0} | {transaction.Source}");
-            }
-
-            Console.WriteLine("\nPress any key to return...");
-            Console.ReadKey();
         }
-
         static List<Transaction> LoadTransactionsFromFiles()
         {
             var transactions = new List<Transaction>();
@@ -249,6 +268,7 @@ namespace PersonalFinanceApp
                             Flow = "OUT",
                             Method = spending.Method,
                             Date = spending.Date,
+                            Session = spending.Session, // Directly map Session from Spending record
                             Amount = spending.Amount
                         });
                     }
@@ -271,6 +291,7 @@ namespace PersonalFinanceApp
                             Flow = "IN",
                             Method = income.Method,
                             Date = income.Date,
+                            Session = income.Session, // Directly map Session from Income record
                             Amount = income.Amount
                         });
                     }
@@ -293,6 +314,7 @@ namespace PersonalFinanceApp
                             Flow = "OUT",
                             Method = loan.Method,
                             Date = loan.Date,
+                            Session = loan.Session, // Directly map Session from Loan record
                             Amount = loan.Amount
                         });
                     }
@@ -315,6 +337,7 @@ namespace PersonalFinanceApp
                             Flow = "IN",
                             Method = debit.Method,
                             Date = debit.Date,
+                            Session = debit.Session, // Directly map Session from Debit record
                             Amount = debit.Amount
                         });
                     }
@@ -1194,19 +1217,8 @@ namespace PersonalFinanceApp
             Console.WriteLine("=== Budget ===");
             Console.ResetColor();
 
-            // Get Input Data from transactions
-            List<Transaction> transactions = new List<Transaction>
-    {
-        new Transaction { ID = 1, Flow = "IN", Method = "Banking", Date = DateTime.Parse("1/12/2024 8:00"), Category = "Subsidy", Amount = 3000000 },
-        new Transaction { ID = 2, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 8:30"), Category = "Withdrawal", Amount = 500000 },
-        new Transaction { ID = 3, Flow = "IN", Method = "Cash", Date = DateTime.Parse("1/12/2024 8:30"), Category = "Withdrawal", Amount = 500000 },
-        new Transaction { ID = 4, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 9:00"), Category = "Food", Amount = 30000 },
-        new Transaction { ID = 5, Flow = "IN", Method = "E-Wallet", Date = DateTime.Parse("1/12/2024 10:00"), Category = "Loan", Amount = 28000 },
-        new Transaction { ID = 6, Flow = "OUT", Method = "Cash", Date = DateTime.Parse("1/12/2024 11:00"), Category = "Debit", Amount = 15000 },
-        new Transaction { ID = 7, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 12:00"), Category = "Food", Amount = 35000 },
-        new Transaction { ID = 8, Flow = "OUT", Method = "Cash", Date = DateTime.Parse("1/12/2024 13:00"), Category = "Snack", Amount = 20000 },
-        new Transaction { ID = 9, Flow = "OUT", Method = "Banking", Date = DateTime.Parse("1/12/2024 18:00"), Category = "Food", Amount = 35000 }
-    };
+            // Load transactions from all CSV files
+            List<Transaction> transactions = LoadTransactionsFromFiles();
 
             do
             {
@@ -1263,9 +1275,10 @@ namespace PersonalFinanceApp
             } while (GetYorN_Selection() == 1);
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Thank you for using the transaction filter!");
+            Console.WriteLine("Thank you for using the budget tool!");
             Console.ResetColor();
         }
+
 
         static int GetValidYear()
         {
@@ -1314,8 +1327,11 @@ namespace PersonalFinanceApp
 
                 Console.WriteLine("\nWhat would you like to do next?");
                 Console.WriteLine("1. View your budget (balances by method)");
-                Console.WriteLine("2. View your expenditure by category");
-                Console.WriteLine("3. View your income by category");
+                Console.WriteLine("2. View your balance book (lending/borrowing)");
+                Console.WriteLine("3. View spending by category");
+                Console.WriteLine("4. View income by category");
+                Console.WriteLine("5. View loans by borrower");
+                Console.WriteLine("6. View borrowing lender");
                 Console.WriteLine("0. Exit this menu");
                 Console.Write("Your selection: ");
 
@@ -1334,14 +1350,84 @@ namespace PersonalFinanceApp
 
                         case 2:
                             Console.Clear();
-                            Console.WriteLine("=== Expenditure by Category ===");
-                            DisplayOutFlowByCategory(filteredTransactions);
+                            Console.WriteLine("=== Balance Book (Lending/Borrowing) ===");
+                            DisplayBalanceBook(filteredTransactions);
                             break;
 
                         case 3:
                             Console.Clear();
+                            Console.WriteLine("=== Spending by Category ===");
+
+                            // Provide the Spending.csv file path
+                            const string spendingFilePath = "Spending.csv";
+
+                            if (File.Exists(spendingFilePath))
+                            {
+                                DisplaySpendingByCategory(spendingFilePath); // Call the correct function
+                            }
+                            else
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Error: Spending.csv file not found.");
+                                Console.ResetColor();
+                            }
+                            break;
+
+                        case 4:
+                            Console.Clear();
                             Console.WriteLine("=== Income by Category ===");
-                            DisplayInFlowByCategory(filteredTransactions);
+
+                            // Provide the Spending.csv file path
+                            const string incomeFilePath = "Income.csv";
+
+                            if (File.Exists(spendingFilePath))
+                            {
+                                DisplayIncomeByCategory(incomeFilePath);
+                            }
+                            else
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Error: Income.csv file not found.");
+                                Console.ResetColor();
+                            }
+                            break;
+
+                        case 5:
+                            Console.Clear();
+                            Console.WriteLine("=== Loan by Borrower ===");
+
+                            // Provide the Spending.csv file path
+                            const string loanFilePath = "Loan.csv";
+
+                            if (File.Exists(spendingFilePath))
+                            {
+                                DisplayLoansByBorrower(loanFilePath);
+                            }
+                            else
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Error: Loan.csv file not found.");
+                                Console.ResetColor();
+                            }
+                            break;
+
+                        case 6:
+                            Console.Clear();
+                            Console.WriteLine("=== Debit by Lender ===");
+
+                            // Provide the Spending.csv file path
+                            const string debitFilePath = "debit.csv";
+
+                            if (File.Exists(spendingFilePath))
+                            {
+                                DisplayDebitByLender(debitFilePath);
+                            }
+                            else
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Error: Debit.csv file not found.");
+                                Console.ResetColor();
+                            }
                             break;
 
                         case 0:
@@ -1370,46 +1456,105 @@ namespace PersonalFinanceApp
             }
         }
 
-        static void DisplayOutFlowByCategory(List<Transaction> transactions)
-        {
-            Console.WriteLine("\nOutflow by Category:");
-            var expenditure = transactions
-                .Where(t => t.Flow == "OUT")
-                .GroupBy(t => t.Category)
-                .Select(g => new { Category = g.Key, Total = g.Sum(t => t.Amount) });
 
-            double totalExpenditure = 0;
+        static void DisplaySpendingByCategory(string spendingFilePath)
+        {
+            if (!File.Exists(spendingFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error: Spending.csv file not found.");
+                Console.ResetColor();
+                return;
+            }
+
+            // Read data from the CSV file
+            var spendingRecords = new List<Spending>();
+            using (var reader = new StreamReader(spendingFilePath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                spendingRecords = csv.GetRecords<Spending>().ToList();
+            }
+
+            // Process data: Group by Category, sum Amount, and sort by total in descending order
+            var expenditure = spendingRecords
+                .GroupBy(s => s.Category)
+                .Select(g => new { Category = g.Key, Total = g.Sum(s => s.Amount) })
+                .OrderByDescending(e => e.Total)
+                .ToList();
+
+            // Calculate total expenditure
+            double totalExpenditure = expenditure.Sum(e => e.Total);
+
+            // Create a Spectre.Console table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Category");
+            table.AddColumn("Amount");
 
             foreach (var item in expenditure)
             {
-                Console.WriteLine($"  {item.Category}: {FormatCurrency(item.Total)}");
-                totalExpenditure += item.Total;
+                table.AddRow(item.Category, FormatCurrency(item.Total));
             }
 
+            // Display table and total
+            Console.Clear();
+            Console.WriteLine("=== Spending by Category ===\n");
+            AnsiConsole.Write(table);
+
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Total Expenditure: {FormatCurrency(totalExpenditure)}");
+            Console.WriteLine($"\nTotal Expenditure: {FormatCurrency(totalExpenditure)}");
             Console.ResetColor();
         }
 
-        static void DisplayInFlowByCategory(List<Transaction> transactions)
+        static void DisplayIncomeByCategory(string incomeFilePath)
         {
-            Console.WriteLine("\nInflow by Category:");
-            var income = transactions
-                .Where(t => t.Flow == "IN")
-                .GroupBy(t => t.Category)
-                .Select(g => new { Category = g.Key, Total = g.Sum(t => t.Amount) });
-
-            double totalIncome = 0;
-
-            foreach (var item in income)
+            if (!File.Exists(incomeFilePath))
             {
-                Console.WriteLine($"  {item.Category}: {FormatCurrency(item.Total)}");
-                totalIncome += item.Total;
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error: Income.csv file not found.");
+                Console.ResetColor();
+                return;
             }
 
+            // Read data from the CSV file
+            var incomeRecords = new List<Income>(); // Use the Income class
+            using (var reader = new StreamReader(incomeFilePath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                incomeRecords = csv.GetRecords<Income>().ToList();
+            }
+
+
+            // Process data: Group by Category, sum Amount, and sort by total in descending order
+            var incomeByCategory = incomeRecords
+                .GroupBy(i => i.Category)
+                .Select(g => new { Category = g.Key, Total = g.Sum(i => i.Amount) })
+                .OrderByDescending(e => e.Total)
+                .ToList();
+
+            // Calculate total income
+            double totalIncome = incomeByCategory.Sum(e => e.Total);
+
+            // Create a Spectre.Console table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Category");
+            table.AddColumn("Amount");
+
+            foreach (var item in incomeByCategory)
+            {
+                table.AddRow(item.Category, FormatCurrency(item.Total));
+            }
+
+            // Display table and total
+            Console.Clear();
+            Console.WriteLine("=== Income by Category ===\n"); // Changed title
+            AnsiConsole.Write(table);
+
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Total Income: {FormatCurrency(totalIncome)}");
+            Console.WriteLine($"\nTotal Income: {FormatCurrency(totalIncome)}"); // Changed label
             Console.ResetColor();
+
         }
 
         static int GetYorN_Selection()
@@ -1455,14 +1600,153 @@ namespace PersonalFinanceApp
 
         static void DisplayBalancesByMethod(List<Transaction> transactions)
         {
-            var methods = transactions.Select(t => t.Method).Distinct();
-            foreach (var method in methods)
+            var balances = transactions
+                .GroupBy(t => t.Method)
+                .Select(g => new { Method = g.Key, Balance = g.Sum(t => t.Flow == "IN" ? t.Amount : -t.Amount) });
+
+            // Create Spectre.Console table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Wallet Type");
+            table.AddColumn("Balance");
+
+            foreach (var balance in balances)
             {
-                double inflow = transactions.Where(t => t.Method == method && t.Flow == "IN").Sum(t => t.Amount);
-                double outflow = transactions.Where(t => t.Method == method && t.Flow == "OUT").Sum(t => t.Amount);
-                Console.WriteLine($"{method} Balance: {FormatCurrency(inflow - outflow)}");
+                table.AddRow(balance.Method, FormatCurrency(balance.Balance));
             }
+
+            // Render the table
+            Console.Clear();
+            Console.WriteLine("=== Balances by Method ===\n");
+            AnsiConsole.Write(table);
         }
+
+
+        static void DisplayBalanceBook(List<Transaction> transactions)
+        {
+            double lending = transactions
+                .Where(t => t.Source == "Loan")
+                .Sum(t => t.Amount);
+
+            double borrowing = transactions
+                .Where(t => t.Source == "Debit")
+                .Sum(t => t.Amount);
+
+            // Create Spectre.Console table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Category");
+            table.AddColumn("Amount");
+
+            table.AddRow("Lending", FormatCurrency(lending));
+            table.AddRow("Borrowing", FormatCurrency(borrowing));
+            table.AddRow("Balance", FormatCurrency(lending - borrowing));
+
+            // Render the table
+            Console.Clear();
+            Console.WriteLine("=== Balance Book ===\n");
+            AnsiConsole.Write(table);
+        }
+
+        static void DisplayLoansByBorrower(string loanFilePath)
+        {
+            if (!File.Exists(loanFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error: Loan.csv file not found.");
+                Console.ResetColor();
+                return;
+            }
+
+            // Read data from the CSV file
+            var loanRecords = new List<Loan>(); // Use the Loan class
+            using (var reader = new StreamReader(loanFilePath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                loanRecords = csv.GetRecords<Loan>().ToList();
+            }
+
+            // Process data: Group by Borrower (assuming 'Method' is the Borrower),
+            // sum Amount, and sort by total in descending order
+            var loansByBorrower = loanRecords
+                .GroupBy(l => l.Borrower) // Group by Borrower
+                .Select(g => new { Borrower = g.Key, Total = g.Sum(l => l.Amount) })
+                .OrderByDescending(e => e.Total)
+                .ToList();
+
+            // Create a Spectre.Console table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Borrower");  // Changed column name
+            table.AddColumn("Amount");
+
+            foreach (var item in loansByBorrower)
+            {
+                table.AddRow(item.Borrower, FormatCurrency(item.Total));
+            }
+
+            // Display table
+            Console.Clear();
+            Console.WriteLine("=== Loans by Borrower ===\n"); // Changed title
+            AnsiConsole.Write(table);
+
+            // Calculate and display total loan amount (optional)
+            double totalLoanAmount = loansByBorrower.Sum(l => l.Total);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"\nTotal Loan Amount: {FormatCurrency(totalLoanAmount)}");
+            Console.ResetColor();
+
+        }
+
+        static void DisplayDebitByLender(string debitFilePath)
+        {
+            if (!File.Exists(debitFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error: Debit.csv file not found.");
+                Console.ResetColor();
+                return;
+            }
+
+            // Read data from the CSV file
+            var debitRecords = new List<Debit>(); // Use the Debit class
+            using (var reader = new StreamReader(debitFilePath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                debitRecords = csv.GetRecords<Debit>().ToList();
+            }
+
+            // Assuming 'Method' property represents the Lender in Debit records
+            var borrowingByLender = debitRecords
+                .GroupBy(d => d.Lender) // Group by Lender (Method)
+                .Select(g => new { Lender = g.Key, Total = g.Sum(d => d.Amount) })
+                .OrderByDescending(e => e.Total)
+                .ToList();
+
+
+            // Create a Spectre.Console table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Lender"); // Changed column name
+            table.AddColumn("Amount");
+
+            foreach (var item in borrowingByLender)
+            {
+                table.AddRow(item.Lender, FormatCurrency(item.Total));
+            }
+
+            // Display table
+            Console.Clear();
+            Console.WriteLine("=== Borrowing by Lender ===\n"); // Changed title
+            AnsiConsole.Write(table);
+
+            // Calculate and display total borrowed amount (optional)
+            double totalBorrowedAmount = borrowingByLender.Sum(b => b.Total);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"\nTotal Borrowed Amount: {FormatCurrency(totalBorrowedAmount)}");
+            Console.ResetColor();
+        }
+
 
         static double CalculateTotalBalance(List<Transaction> transactions)
         {
