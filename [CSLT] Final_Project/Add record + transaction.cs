@@ -8,6 +8,10 @@ using static FinancialManager.Program.GamificationManager;
 using System.Globalization;
 using CsvHelper.Configuration;
 using CsvHelper;
+using System.Diagnostics.CodeAnalysis;
+using static System.Runtime.InteropServices.JavaScript.JSType;
+using static System.Collections.Specialized.BitVector32;
+using System.Text.RegularExpressions;
 namespace FinancialManager
 {
     class Program
@@ -17,7 +21,7 @@ namespace FinancialManager
         static GamificationManager gamificationManager = new GamificationManager();
         private static ChallengeManager challengeManager = new ChallengeManager();
         private static string transactionFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Transactions.csv");
-        static void Main2(string[] args)
+        static void Main(string[] args)
         {
             while (true)
             {
@@ -62,6 +66,7 @@ namespace FinancialManager
                         LoadTransactionsFromFile("Income.csv");
                         LoadTransactionsFromFile("Loan.csv");
                         LoadTransactionsFromFile("Debit.csv");
+                        SaveTransactionsToFile();
                         ShowTransactions();
                         break;
                     case "3":
@@ -115,153 +120,263 @@ namespace FinancialManager
                 string description = string.Empty;
                 string borrower = string.Empty;
                 string lender = string.Empty;
+                string note = string.Empty;
+                string session = string.Empty;
+                string method = string.Empty;
+                string flow = string.Empty;
+                string source = string.Empty;
+                int id = 0;
                 DateTime date = DateTime.Now;
                 switch (choice)
                 {
                     case "1":
-                        AddSpendingRecord(out amount, out category, out description, out date);
+                        AddSpendingRecord(out flow, out id, out source, out amount, out method, out category, out note, out date, out session);
                         string spendingFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spending.csv");
                         string SpendingFileName = "Spending.csv";
                         string SpendingFilePath = Path.Combine(spendingFilePath, SpendingFileName);
-                        WriteSpendingToCsv(spendingFilePath, amount, category, description, date);
+                        WriteSpendingToCsv(SpendingFilePath, flow, id, source, amount, method, note, date);
                         Console.ReadKey();
                         break;
                     case "2":
-                        AddIncomeRecord(out amount, out category, out description, out date);
+                        AddIncomeRecord(out id, out session, out category, out source, out flow, out method, out date, out amount, out note);
                         string incomeFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Income.csv");
                         string IncomeFileName = "Income.csv";
                         string IncomeFilePath = Path.Combine(incomeFilePath, IncomeFileName);
-                        WriteIncomeToCsv(incomeFilePath, amount, category, description, date);
+                        WriteIncomeToCsv(IncomeFilePath, id, source, flow, method, amount, note, date);
                         Console.ReadKey();
                         break;
                     case "3":
-                        AddLoanRecord(out amount, out borrower, out description, out date);
+                        AddLoanRecord(out session, out id, out source, out flow, out method, out amount, out borrower, out note, out date);
                         string loanFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Loan.csv");
                         string LoanFileName = "Loan.csv";
                         string LoanFilePath = Path.Combine(loanFilePath, LoanFileName);
-                        WriteLoanToCsv(loanFilePath, amount, borrower, description, date);
+                        WriteLoanToCsv(LoanFilePath, method, id, source, flow, amount, borrower, note, date);
                         Console.ReadKey();
                         break;
                     case "4":
-                        AddDebitRecord(out amount, out lender, out description, out date);
-                        string debitFilePath = @"F:\ConsoleApp1\Debit.csv"; //change the path
+                        AddDebitRecord(out session, out id, out source, out flow, out method, out amount, out lender, out note, out date);
+                        string debitFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Debit.csv");
                         string DebitFileName = "Debit.csv";
                         string DebitFilePath = Path.Combine(debitFilePath, DebitFileName);
-                        WriteDebitToCsv(debitFilePath, amount, lender, description, date);
+                        WriteDebitToCsv(debitFilePath, method, id, source, flow, amount, lender, note, date);
                         Console.ReadKey();
                         break;
+                    case "0":
+                        return;
                     default:
                         Console.ForegroundColor = ConsoleColor.Red;
                         Console.WriteLine("Invalid choice. Returning to the main menu.");
                         Console.ResetColor();
                         break;
                 }
+                Console.WriteLine("\nPress any key to return to the Add Record menu...");
+                Console.ReadKey();
             }
         }
 
-            static void StoreTransaction(decimal amount, string category, string description, DateTime date, string type)
-            {
-                // Add a new transaction to the static list
-                Transactions.Add(new Transaction(amount, category, description, date, type));
-                SaveTransactionsToFile();
-            }
+        static void StoreTransaction(int id, string source, string flow, string method, DateTime date, string category, decimal amount, string note)
+        {
+            // Add a new transaction to the static list
+            Transactions.Add(new Transaction(id, source, flow, method, date, category, amount, note));
+            SaveTransactionsToFile();
+        }
 
-            static void AddSpendingRecord(out decimal amount, out string category, out string description, out DateTime date)
+        static void AddSpendingRecord(out string flow, out int id, out string source, out decimal amount, out string method, out string category, out string note, out DateTime date, out string session)
+        {
+            while (true)
             {
                 Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("=== Add Spending Record ===");
-
-                Console.Write("Enter amount (e.g., 30k, 3m, 3b, 30.000): ");
+                Console.ResetColor();
+                source = "Spending";
+                flow = "OUT";
+                id = ++currentId;
+                // Step 1: Read amount
                 amount = ReadDecimalInput();
 
-                Console.Write("Enter category (e.g., Food, Shopping, Housing): ");
-                category = Console.ReadLine();
+                // Step 2: Get payment method
+                method = GetMethod();
 
-                Console.Write("Enter description: ");
-                description = Console.ReadLine();
+                // Step 3: Get spending category
+                category = GetSpendingCategory();
 
-                date = GetDateInput("Enter date (leave blank for today): ");
+                // Step 4: Enter a note
+                Console.Write("Enter Note: ");
+                note = Console.ReadLine();
 
-                // Store the spending record
-                StoreTransaction(amount, category, description, date, "Spending");
+                // Step 5: Get the date (adjusted for DD/MM format and default year)
+                date = GetDateInput("Enter date DD/MM (Default by current year, leave blank for today): ");
 
-                Console.WriteLine($"Spending Record Added: {FormatCurrency(amount)} VND, On {category}, For {description}, On {date.ToShortDateString()}");
-                // TODO: Store this record in a collection or file
+                // Step 6: Choose session of the day
+                session = GetSessionOfDay();
+
+                // Step 7: Display result
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\nSpending Record:");
+                Console.ResetColor();
+                Console.WriteLine($"  - Session: {session}");
+                Console.WriteLine($"  - Date: {date:dd/MM/yyyy}");
+                Console.WriteLine($"  - Amount: {FormatCurrency(amount)} VND");
+                Console.WriteLine($"  - Method: {method}");
+                Console.WriteLine($"  - Category: {category}");
+                Console.WriteLine($"  - Note: {note}");
+
+                // Step 8: Confirm save
+                Console.WriteLine("\nDo you want to save this record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 1)
+                {
+                    StoreTransaction(id, source, flow, method, date, amount.ToString(), Convert.ToDecimal(note), "Spending");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Record saved successfully!");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Record not saved.");
+                    Console.ResetColor();
+                }
+
+                // Step 9: Ask to add another record
+                Console.WriteLine("\nDo you want to add another record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 0)
+                {
+                    break; // Exit to AddRecord menu
+                }
             }
-            static void WriteSpendingToCsv(string SpendingFilePath, decimal amount, string category, string description, DateTime date)
+        }
+        static void WriteSpendingToCsv(string SpendingFilePath, string flow, int id, string source, decimal amount, string method, string note, DateTime date)
+        {
+
+            try
             {
-
-                try
+                if (!File.Exists(SpendingFilePath))
                 {
-                    if (!File.Exists(SpendingFilePath))
+                    using (File.Create(SpendingFilePath)) { }
+                }
+
+
+                List<Spending> spendings = new List<Spending>
+                {
+                    // Thêm thông tin vào danh sách chi tiêu
+                    new Spending
                     {
-                        using (File.Create(SpendingFilePath)) { }
+                        Amount = amount,
+                        Category = category,
+                        Description = description,
+                        Date = date
                     }
-
-
-                    List<Spending> spendings = new List<Spending>
-                {
-                        // Thêm thông tin vào danh sách chi tiêu
-                        new Spending
-                        {
-                            Amount = amount,
-                            Category = category,
-                            Description = description,
-                            Date = date
-                        }
                 };
 
 
-                    var configSpendings = new CsvConfiguration(CultureInfo.InvariantCulture)
-                    {
-                        HasHeaderRecord = false
-                    };
-
-                    using (StreamWriter streamWriter = new StreamWriter(SpendingFilePath, true))
-                    using (CsvWriter csvWriter = new CsvWriter(streamWriter, configSpendings))
-                    {
-                        csvWriter.WriteRecords(spendings);
-                    }
-
-                    Console.WriteLine("Data written to CSV successfully.");
-                }
-
-                catch (Exception ex)
+                var configSpendings = new CsvConfiguration(CultureInfo.InvariantCulture)
                 {
-                    throw;
+                    HasHeaderRecord = false
+                };
+
+                using (StreamWriter streamWriter = new StreamWriter(SpendingFilePath, true))
+                using (CsvWriter csvWriter = new CsvWriter(streamWriter, configSpendings))
+                {
+                    csvWriter.WriteRecords(spendings);
                 }
+
+                Console.WriteLine("Data written to CSV successfully.");
             }
+
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
         public class Spending
         {
             public decimal Amount { get; set; }
             public string Category { get; set; }
-            public string Description { get; set; }
+            public string Note { get; set; }
+            public string Method { get; set; }
+            public string Session { get; set; }
             public DateTime Date { get; set; }
+            public string Source { get; set; }
+            public string Flow { get; set; }
+            public int Id { get; set; }
         }
 
-        static void AddIncomeRecord(out decimal amount, out string category, out string description, out DateTime date)
+        static void AddIncomeRecord(out int id, out string session, out string category, out string source, out string flow, out string method, out DateTime date, out decimal amount, out string note)
         {
-            Console.Clear();
-            Console.WriteLine("=== Add Income Record ===");
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("=== Add Income Record ===");
+                Console.ResetColor();
+                id = ++currentId;
+                source = "Income";
+                flow = "IN";
+                amount = ReadDecimalInput();
 
-            Console.Write("Enter amount (e.g., 30k, 3m, 3B, 30.000): ");
-            amount = ReadDecimalInput();
+                category = GetIncomeCategory();
 
-            Console.Write("Enter category (e.g., Main Job, Part-Time Job, Savings): ");
-            category = Console.ReadLine();
+                method = GetMethod();
 
-            Console.Write("Enter description: ");
-            description = Console.ReadLine();
+                // Step 4: Enter a note
+                Console.Write("Enter Note: ");
+                note = Console.ReadLine();
 
-            date = GetDateInput("Enter date (leave blank for today): ");
+                // Step 5: Get the date (adjusted for DD/MM format and default year)
+                date = GetDateInput("Enter date DD/MM (Default by current year, leave blank for today): ");
 
-            // Store the income record
-            StoreTransaction(amount, category, description, date, "Income");
+                // Step 6: Choose session of the day
+                session = GetSessionOfDay();
 
-            Console.WriteLine($"Income Record Added: {FormatCurrency(amount)} VND, From {category}, For {description}, On {date.ToShortDateString()}");
-            // TODO: Store this record in a collection or file
+                // Step 7: Display result
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\nIncome Record:");
+                Console.ResetColor();
+                Console.WriteLine($"  - Session: {session}");
+                Console.WriteLine($"  - Date: {date:dd/MM/yyyy}");
+                Console.WriteLine($"  - Amount: {FormatCurrency(amount)} VND");
+                Console.WriteLine($"  - Method: {method}");
+                Console.WriteLine($"  - Category: {category}");
+                Console.WriteLine($"  - Note: {note}");
+
+                // Step 8: Confirm save
+                Console.WriteLine("\nDo you want to save this record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 1)
+                {
+                    StoreTransaction(id, source, flow, method, date, amount.ToString(), Convert.ToDecimal(note), "Income");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Record saved successfully!");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Record not saved.");
+                    Console.ResetColor();
+                }
+
+                // Step 9: Ask to add another record
+                Console.WriteLine("\nDo you want to add another record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 0)
+                {
+                    break; // Exit the loop to return to AddRecord()
+                }
+            }
         }
-        static void WriteIncomeToCsv(string IncomeFilePath, decimal amount, string category, string description, DateTime date)
+        static void WriteIncomeToCsv(string IncomeFilePath, int id, string source, string flow, string method, decimal amount, string note, DateTime date)
         {
 
             try
@@ -277,10 +392,13 @@ namespace FinancialManager
                     // Thêm thông tin vào danh sách chi tiêu
                     new Income
                     {
+                        Id = id,
+                        Source = source,
+                        Flow = flow,
+                        Method = method,
+                        Date = date,
                         Amount = amount,
-                        Category = category,
-                        Description = description,
-                        Date = date
+                        Note = note,
                     }
                 };
 
@@ -307,33 +425,84 @@ namespace FinancialManager
         public class Income
         {
             public decimal Amount { get; set; }
-            public string Category { get; set; }
-            public string Description { get; set; }
+            public string Note { get; set; }
+            public string FLow { get; set; }
+            public string Method { get; set; }
+            public string Source { get; set; }
+            public string Flow { get; set; }
+            public int Id { get; set; }
             public DateTime Date { get; set; }
         }
-        static void AddLoanRecord(out decimal amount, out string borrower, out string description, out DateTime date)
+        static void AddLoanRecord(out string session, out int id, out string source, out string flow, out string method, out decimal amount, out string borrower, out string note, out DateTime date)
         {
-            Console.Clear();
-            Console.WriteLine("=== Add Loan Record ===");
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("=== Add Loan Record ===");
+                Console.ResetColor();
+                id = ++currentId;
+                source = "Loan";
+                flow = "OUT";
+                amount = ReadDecimalInput();
 
-            Console.Write("Enter amount (e.g., 30k, 3m, 3B, 30.000): ");
-            amount = ReadDecimalInput();
+                Console.Write("Enter who you lend to: ");
+                borrower = GetValidName();
 
-            Console.Write("Enter who you lend to: ");
-            borrower = Console.ReadLine();
+                method = GetMethod();
 
-            Console.Write("Enter description (e.g: what they borrow for): ");
-            description = Console.ReadLine();
+                // Step 4: Enter a note
+                Console.Write("Enter Note: ");
+                note = Console.ReadLine();
 
-            date = GetDateInput("Enter date (leave blank for today): ");
+                // Step 5: Get the date (adjusted for DD/MM format and default year)
+                date = GetDateInput("Enter date DD/MM (Default by current year, leave blank for today): ");
 
-            //Store the loan record
-            Program.StoreTransaction(amount, borrower, description, date, "Loan");
+                // Step 6: Choose session of the day
+                session = GetSessionOfDay();
 
-            Console.WriteLine($"Loan Record Added: {FormatCurrency(amount)} VND, To {borrower}, For {description}, On {date.ToShortDateString()}");
-            // TODO: Store this record in a collection or file
+                // Step 7: Display result
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\nLoan Record:");
+                Console.ResetColor();
+                Console.WriteLine($"  - Session: {session}");
+                Console.WriteLine($"  - Date: {date:dd/MM/yyyy}");
+                Console.WriteLine($"  - Amount: {FormatCurrency(amount)} VND");
+                Console.WriteLine($"  - Method: {method}");
+                Console.WriteLine($"  - Borrower: {borrower}");
+                Console.WriteLine($"  - Note: {note}");
+
+                // Step 8: Confirm save
+                Console.WriteLine("\nDo you want to save this record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 1)
+                {
+                    StoreTransaction(id, source, flow, method, date, amount.ToString(), Convert.ToDecimal(note), "Loan");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Record saved successfully!");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Record not saved.");
+                    Console.ResetColor();
+                }
+
+                // Step 9: Ask to add another record
+                Console.WriteLine("\nDo you want to add another record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 0)
+                {
+                    break; // Exit the loop to return to AddRecord()
+                }
+            }
         }
-        static void WriteLoanToCsv(string LoanFilePath, decimal amount, string borrower, string description, DateTime date)
+        static void WriteLoanToCsv(string LoanFilePath, string method, int id, string source, string flow, decimal amount, string borrower, string note, DateTime date)
         {
 
             try
@@ -349,10 +518,13 @@ namespace FinancialManager
                     // Thêm thông tin vào danh sách chi tiêu
                     new Loan
                     {
+                        Id = id,
+                        Source = source,
+                        Flow = flow,
+                        Method = method,
+                        Date = date,
                         Amount = amount,
-                        borrower = borrower,
-                        Description = description,
-                        Date = date
+                        Note = note,
                     }
                 };
                 ///
@@ -381,32 +553,83 @@ namespace FinancialManager
         {
             public decimal Amount { get; set; }
             public string borrower { get; set; }
-            public string Description { get; set; }
+            public string Note { get; set; }
             public DateTime Date { get; set; }
+            public string Flow {  get; set; }
+            public string Method { get; set; }
+            public int Id { get; set; }
+            public string Source { get; set; }
         }
-        static void AddDebitRecord(out decimal amount, out string lender, out string description, out DateTime date)
+        static void AddDebitRecord(string source, string session, string method, int id, string flow, out decimal amount, out string lender, out string note, out DateTime date)
         {
-            Console.Clear();
-            Console.WriteLine("=== Add Debit Record ===");
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine("=== Add Debit Record ===");
+                Console.ResetColor();
+                id = currentId++;
+                source = "Debit";
+                flow = "IN";
+                amount = ReadDecimalInput();
 
-            Console.Write("Enter amount (e.g., 30k, 3m, 3B, 30.000): ");
-            amount = ReadDecimalInput();
+                Console.Write("Enter who you borrow from: ");
+                lender = GetValidName();
 
-            Console.Write("Enter who you take loan from (e.g: bank's name, a person's name): ");
-            lender = Console.ReadLine();
+                method = GetMethod();
 
-            Console.Write("Enter description (e.g: What you used it for?): ");
-            description = Console.ReadLine();
+                // Step 4: Enter a note
+                Console.Write("Enter Note: ");
+                note = Console.ReadLine();
 
-            date = GetDateInput("Enter date (leave blank for today): ");
+                // Step 5: Get the date (adjusted for DD/MM format and default year)
+                date = GetDateInput("Enter date DD/MM (Default by current year, leave blank for today): ");
 
-            // Store the debit record
-            StoreTransaction(amount, lender, description, date, "Debit");
+                // Step 6: Choose session of the day
+                session = GetSessionOfDay();
 
-            Console.WriteLine($"Debit Record Added: {FormatCurrency(amount)} VND, From {lender}, To {description}, On {date.ToShortDateString()}");
-            // TODO: Store this record in a collection or file
+                // Step 7: Display result
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\nDebit Record:");
+                Console.ResetColor();
+                Console.WriteLine($"  - Session: {session}");
+                Console.WriteLine($"  - Date: {date:dd/MM/yyyy}");
+                Console.WriteLine($"  - Amount: {FormatCurrency(amount)} VND");
+                Console.WriteLine($"  - Method: {method}");
+                Console.WriteLine($"  - Borrower: {lender}");
+                Console.WriteLine($"  - Note: {note}");
+
+                // Step 8: Confirm save
+                Console.WriteLine("\nDo you want to save this record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 1)
+                {
+                    StoreTransaction(id, source, flow, method, date, amount.ToString(), Convert.ToDecimal(note), "Debit");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Record saved successfully!");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Record not saved.");
+                    Console.ResetColor();
+                }
+
+                // Step 9: Ask to add another record
+                Console.WriteLine("\nDo you want to add another record?");
+                Console.WriteLine("1. Yes");
+                Console.WriteLine("0. No");
+
+                if (GetYorN_Selection() == 0)
+                {
+                    break; // Exit the loop to return to AddRecord()
+                }
+            }
         }
-        static void WriteDebitToCsv(string DebitFilePath, decimal amount, string lender, string description, DateTime date)
+        static void WriteDebitToCsv(string DebitFilePath, int id, string source, string flow, string method, decimal amount, string lender, string note, DateTime date)
         {
 
             try
@@ -422,10 +645,13 @@ namespace FinancialManager
                     // Thêm thông tin vào danh sách chi tiêu
                     new Debit
                     {
+                        Id = id,
+                        Source = source,
+                        Flow = flow,
+                        Method = method,
+                        Date = date,
                         Amount = amount,
-                        lender = lender,
-                        Description = description,
-                        Date = date
+                        Note = note,
                     }
                 };
 
@@ -453,8 +679,12 @@ namespace FinancialManager
         {
             public decimal Amount { get; set; }
             public string lender { get; set; }
-            public string Description { get; set; }
+            public string Note { get; set; }
             public DateTime Date { get; set; }
+            public string Flow { get; set; }
+            public string Method { get; set; }
+            public int Id { get; set; }
+            public string Source { get; set; }
         }
 
         static decimal ReadDecimalInput()
@@ -526,7 +756,50 @@ namespace FinancialManager
             Console.ResetColor();
             return DateTime.Now;
         }
+        static int GetNextId(string fileName)
+        {
+            if (!File.Exists(fileName))
+            {
+                return 1; // Start ID from 1 if file doesn't exist
+            }
 
+            // Read all lines from the file
+            var lines = File.ReadAllLines(fileName);
+
+            // Extract the last ID (skip the header)
+            if (lines.Length <= 1)
+            {
+                return 1;
+            }
+
+            // Get the ID of the last record
+            var lastLine = lines[^1];
+            var lastId = int.Parse(lastLine.Split(',')[0]);
+            return lastId + 1;
+        }
+        static int GetYorN_Selection()
+        {
+            while (true)
+            {
+                Console.Write("Your selection: ");
+                if (int.TryParse(Console.ReadLine(), out int selection))
+                {
+                    if (selection == 1 || selection == 0)
+                        return selection;
+
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Invalid selection. Please choose 0 or 1.");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Make sure to enter an integer value!");
+                    Console.ResetColor();
+                }
+                Console.Clear();
+            }
+        }
 
         static void ShowBudget()
         {
@@ -557,7 +830,250 @@ namespace FinancialManager
                 Console.WriteLine($"Error saving transaction: {ex.Message}");
             }
         }
+        static string GetMethod()
+        {
+            string method = "";
+            Console.WriteLine("Spend by (IN three following types: Banking, Cash or E-Wallet)");
+            Console.WriteLine("1. Banking");
+            Console.WriteLine("2. Cash");
+            Console.WriteLine("3. E-Wallet");
 
+            do
+            {
+                Console.Write("Your selection: ");
+                if (int.TryParse(Console.ReadLine(), out int selection))
+                {
+                    if (selection == 1)
+                    {
+                        method = "Banking";
+                        break;
+                    }
+                    else if (selection == 2)
+                    {
+                        method = "Cash";
+                        break;
+                    }
+                    else if (selection == 3)
+                    {
+                        method = "E-Wallet";
+                        break;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid selection. Please choose 1, 2, or 3.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Make sure to enter an integer value!");
+                }
+            } while (method == "");
+            return method;
+        }
+
+        static string GetSpendingCategory()
+        {
+            string category = "";
+            Console.WriteLine("Enter category of spending (adjusted for typical spending habits):");
+            Console.WriteLine("1. Food & Groceries"); // Essential
+            Console.WriteLine("2. Housing & Utilities"); // Essential
+            Console.WriteLine("3. Transportation"); // Essential for many
+            Console.WriteLine("4. Healthcare"); // Important
+            Console.WriteLine("5. Education"); // Investment
+            Console.WriteLine("6. Personal & Family Care"); // Broad category
+            Console.WriteLine("7. Social & Entertainment"); // Leisure
+            Console.WriteLine("8. Savings & Investments"); // Future-oriented
+            Console.WriteLine("9. Debt Payments"); // Financial responsibility
+
+            do
+            {
+                Console.Write("Your selection: ");
+                if (int.TryParse(Console.ReadLine(), out int selection))
+                {
+                    switch (selection)
+                    {
+                        case 1:
+                            category = "Food & Groceries";
+                            break;
+                        case 2:
+                            category = "Housing & Utilities";
+                            break;
+                        case 3:
+                            category = "Transportation";
+                            break;
+                        case 4:
+                            category = "Healthcare";
+                            break;
+                        case 5:
+                            category = "Education";
+                            break;
+                        case 6:
+                            category = "Personal & Family Care";
+                            break;
+                        case 7:
+                            category = "Social & Entertainment";
+                            break;
+                        case 8:
+                            category = "Savings & Investments";
+                            break;
+                        case 9:
+                            category = "Debt Payments";
+                            break;
+                        default:
+                            Console.WriteLine("Invalid selection. Please choose from 1 to 9.");
+                            break;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Make sure to enter an integer value!");
+                }
+            } while (category == "");
+            return category;
+        }
+
+        static string GetIncomeCategory()
+        {
+            string category = "";
+            Console.WriteLine("Enter income category:");
+            Console.WriteLine("1. Family Support");
+            Console.WriteLine("2. Main Job (Full-time/Part-time)");
+            Console.WriteLine("3. Freelancing/Gig Work");
+            Console.WriteLine("4. Scholarship/Grant");
+            Console.WriteLine("5. Investments/Interest");
+            Console.WriteLine("6. Other");
+
+            do
+            {
+                Console.Write("Your selection: ");
+                if (int.TryParse(Console.ReadLine(), out int selection))
+                {
+                    switch (selection)
+                    {
+                        case 1:
+                            category = "Family Support";
+                            break;
+                        case 2:
+                            category = "Main Job";
+                            break;
+                        case 3:
+                            category = "Freelancing/Gig Work";
+                            break;
+                        case 4:
+                            category = "Scholarship/Grant";
+                            break;
+                        case 5:
+                            category = "Investments/Interest";
+                            break;
+                        case 6:
+                            category = "Other";
+                            break;
+                        default:
+                            Console.WriteLine("Invalid selection. Please choose from 1 to 6.");
+                            break;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Make sure to enter an integer value!");
+                }
+            } while (category == "");
+
+            // Optionally, get more details for "Other" category:
+            if (category == "Other")
+            {
+                Console.Write("Please specify the 'Other' income source: ");
+                category = Console.ReadLine(); // Overwrite "Other" with the user's input
+            }
+
+
+            return category;
+        }
+
+        static string GetValidName()
+        {
+            string name = "";
+
+            do
+            {
+                name = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(name)) // Check for empty or whitespace-only input
+                {
+                    Console.WriteLine("Name cannot be empty. Please enter a valid name.");
+                    Console.Write("Retry: ");
+                }
+                else if (!Regex.IsMatch(name, @"^[a-zA-Z\s]+$")) // Use regex for validation
+                {
+                    Console.WriteLine("Name contains invalid characters. Please use letters and spaces only.");
+                    Console.Write("Retry: ");
+                }
+
+            } while (string.IsNullOrWhiteSpace(name) || !Regex.IsMatch(name, @"^[a-zA-Z\s]+$"));
+
+            return name;
+        }
+
+        static string FormatCurrency(decimal amount)
+        {
+            // Format as Vietnamese currency with dot separator and add ₫ symbol
+            return $"{amount:N0}".Replace(",", ".");
+        }
+
+        static string GetSessionOfDay()
+        {
+            Console.WriteLine("\nPlease choose a session of the day:");
+            Console.WriteLine("  1. Morning (6:00-10:59)");
+            Console.WriteLine("  2. Midday (11:00-12:59)");
+            Console.WriteLine("  3. Afternoon (13:00-17:59)");
+            Console.WriteLine("  4. Evening (18:00-23:59)");
+            Console.WriteLine("  5. Night (0:00-5:59)");
+            Console.WriteLine("  0. Null (no specific session)");
+
+            while (true)
+            {
+                Console.Write("Your selection: ");
+                string input = Console.ReadLine();
+
+                switch (input)
+                {
+                    case "1": return "Morning (6:00-10:59)";
+                    case "2": return "Midday (11:00-12:59)";
+                    case "3": return "Afternoon (13:00-17:59)";
+                    case "4": return "Evening (18:00-23:59)";
+                    case "5": return "Night (0:00-5:59)";
+                    case "0": return "No specific session";
+                    default:
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid selection. Please choose a valid option.");
+                        Console.ResetColor();
+                        break;
+                }
+            }
+        }
+
+        static DateTime GetDateInput(string prompt)
+        {
+            Console.Write(prompt);
+            string input = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return DateTime.Now;
+            }
+
+            // Try parsing input as DD/MM with the current year
+            if (DateTime.TryParseExact(input + $"/{DateTime.Now.Year}", "dd/MM/yyyy",
+                                       null, System.Globalization.DateTimeStyles.None, out DateTime date))
+            {
+                return date;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("Invalid date. Using today's date instead.");
+            Console.ResetColor();
+            return DateTime.Now;
+        }
         static void ShowHome()
         {
             Console.Clear();
@@ -928,28 +1444,39 @@ namespace FinancialManager
             Console.WriteLine("\nPress any key to return...");
             Console.ReadKey();
         }
-    }
 
-    public class Transaction
-    {
-        public string Type { get; set; } // "Income" or "Expense"
-        public decimal Amount { get; set; }
-        public string Category { get; set; }
-        public string Description { get; set; }
-        public DateTime Date { get; set; }
+        private static int currentId = 0; // Static field to track the current max ID
 
-        public Transaction(decimal amount, string category, string description, DateTime date, string type)
+        public class Transaction
         {
-            Amount = amount;
-            Category = category;
-            Description = description;
-            Date = date;
-            Type = type;
-        }
+            public string Type { get; set; } // "Income" or "Expense"
+            public decimal Amount { get; set; }
+            public string Category { get; set; }
+            public string Note { get; set; }
+            public DateTime Date { get; set; }
+            public string Method { get; set; }
+            public string Session { get; set; }
+            public int Id { get; private set; } // Unique ID for each transaction        public string Source { get; set; }
+            public string Flow { get; set; }
+            public string Source { get; set; }
 
-        public override string ToString()
-        {
-            return $"{Date.ToShortDateString()} - {Type} - {Amount:C} - {Category} - {Description}";
+            //ID	Source	Flow	Method	Date	Category	Amount
+            public Transaction(int id, string source, string flow, string method, DateTime date, string category, decimal amount, string note)
+            {
+                Id = id;
+                Source = source;
+                Flow = flow;
+                Method = method;
+                Date = date;
+                Category = category;
+                Amount = amount;
+                Note = note;
+            }
+
+            public override string ToString()
+            {
+                return $"{Date.ToShortDateString()} - {Type} - {Amount:C} - {Category} - {Note}";
+            }
         }
     }
 }
