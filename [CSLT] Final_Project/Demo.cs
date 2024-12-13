@@ -20,7 +20,7 @@ namespace PersonalFinanceApp
             public double Amount { get; set; }
         }
 
-        static void Main(string[] args)
+        static void Main1(string[] args)
         {
             NavigationBar();
         }

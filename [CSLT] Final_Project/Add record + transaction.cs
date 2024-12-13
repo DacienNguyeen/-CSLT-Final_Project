@@ -16,7 +16,7 @@ namespace FinancialManager
         private static List<Transaction> Transactions = new List<Transaction>();
         static GamificationManager gamificationManager = new GamificationManager();
         private static ChallengeManager challengeManager = new ChallengeManager();
-        private static string transactionFilePath = @"F:\ConsoleApp1"; //change this path
+        private static string transactionFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Transactions.csv");
         static void Main(string[] args)
         {
             while (true)
@@ -120,7 +120,7 @@ namespace FinancialManager
                 {
                     case "1":
                         AddSpendingRecord(out amount, out category, out description, out date);
-                        string spendingFilePath = @"F:\ConsoleApp1\Spending.csv"; //change the path
+                        string spendingFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spending.csv");
                         string SpendingFileName = "Spending.csv";
                         string SpendingFilePath = Path.Combine(spendingFilePath, SpendingFileName);
                         WriteSpendingToCsv(spendingFilePath, amount, category, description, date);
@@ -128,7 +128,7 @@ namespace FinancialManager
                         break;
                     case "2":
                         AddIncomeRecord(out amount, out category, out description, out date);
-                        string incomeFilePath = @"F:\ConsoleApp1\Income.csv"; //change the path
+                        string incomeFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Income.csv");
                         string IncomeFileName = "Income.csv";
                         string IncomeFilePath = Path.Combine(incomeFilePath, IncomeFileName);
                         WriteIncomeToCsv(incomeFilePath, amount, category, description, date);
@@ -136,7 +136,7 @@ namespace FinancialManager
                         break;
                     case "3":
                         AddLoanRecord(out amount, out borrower, out description, out date);
-                        string loanFilePath = @"F:\ConsoleApp1\Loan.csv"; //change the path
+                        string loanFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Loan.csv");
                         string LoanFileName = "Loan.csv";
                         string LoanFilePath = Path.Combine(loanFilePath, LoanFileName);
                         WriteLoanToCsv(loanFilePath, amount, borrower, description, date);
