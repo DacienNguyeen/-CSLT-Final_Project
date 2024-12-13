@@ -355,6 +355,7 @@ namespace FinancialManager
                         Date = date
                     }
                 };
+                ///
 
 
                 var configIncomes = new CsvConfiguration(CultureInfo.InvariantCulture)
