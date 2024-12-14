@@ -3,9 +3,12 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CsvHelper.Configuration;
 using CsvHelper;
-using ConsoleTables;
+using ConsoleTables; 
 using Spectre.Console;
 using static System.Net.Mime.MediaTypeNames;
+using MathNet.Numerics.Statistics;
+using Accord.Statistics.Models.Regression;
+using Accord.Statistics.Models.Regression.Linear;
 
 namespace PersonalFinanceApp
 {
@@ -23,6 +26,7 @@ namespace PersonalFinanceApp
 
             public string Category { get; set; }
             public double Amount { get; set; }
+            public string Note { get; set; }
         }
         public class Spending
         {
@@ -68,6 +72,20 @@ namespace PersonalFinanceApp
 
         }
 
+        class OutFlowEvent
+        {
+            public DateTime Date { get; set; }
+            public string Type { get; set; } // "Spending", "Loan"
+            public double Amount { get; set; }
+        }
+
+        public class FinancialEvent
+        {
+            public DateTime Date { get; set; } // Date of the financial event
+            public string Type { get; set; }   // Type of event (e.g., Spending, Debit, Loan)
+            public double Amount { get; set; } // Amount of the event
+        }
+
         static void Main(string[] args)
         {
             NavigationBar();
@@ -97,7 +115,7 @@ namespace PersonalFinanceApp
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("[5] Saving");
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("[6] Exit");
+                Console.WriteLine("[0] Exit");
                 Console.ResetColor();
 
                 // Prompt
@@ -113,7 +131,7 @@ namespace PersonalFinanceApp
                         ShowHome();
                         break;
                     case "2":
-                        ShowTransactions(); // Stay in ShowTransactions loop
+                        ShowTransactions();
                         break;
                     case "3":
                         AddRecord();
@@ -124,7 +142,7 @@ namespace PersonalFinanceApp
                     case "5":
                         ShowSaving();
                         break;
-                    case "6":
+                    case "0":
                         Console.WriteLine("Exiting the application. Goodbye!");
                         return; // Exit the program
                     default:
@@ -145,6 +163,88 @@ namespace PersonalFinanceApp
             Console.WriteLine("Gamify your expense tracking by maintaining a streak.");
             Console.WriteLine("TODO: Add streak tracking logic using System.DateTime");
         }
+
+        static void Home_ShowReminder(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("=== Home ===");
+            Console.ResetColor();
+
+            DateTime today = DateTime.Now.Date;
+
+            // Calculate today's expenditure
+            double todayExpenditure = transactions
+                .Where(t => t.Source == "Spending" && t.Date.Date == today)
+                .Sum(t => t.Amount);
+
+            // Check overspending occurrences
+            int overspendingCount = CalculateOverspendingCount(transactions, dailyBudget);
+            Console.WriteLine($"Daily Budget: {dailyBudget:N0} VND");
+            Console.WriteLine($"Today's Expenditure: {todayExpenditure:N0} VND");
+
+            // Display reminder if overspending limit is exceeded
+            if (overspendingCount > overspendingLimit)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Reminder: You have exceeded your overspending limit {overspendingLimit} times this month!");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("\n[1] View Transactions");
+            Console.WriteLine("[2] Add Record");
+            Console.WriteLine("[3] View Budget");
+            Console.WriteLine("[4] Exit");
+            Console.Write("Choose an option: ");
+        }
+
+        static void ShowHome(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("=== Home ===");
+            Console.ResetColor();
+
+            // Gamification introduction
+            Console.WriteLine("Gamify your expense tracking by maintaining a streak.");
+            Console.WriteLine("TODO: Add streak tracking logic using System.DateTime");
+
+            // Call the overspending reminder logic
+            Home_ShowReminder(transactions, dailyBudget, overspendingLimit);
+
+            // Prompt user for the next action
+            Console.WriteLine("\n[1] View Transactions");
+            Console.WriteLine("[2] Add Record");
+            Console.WriteLine("[3] View Budget");
+            Console.WriteLine("[4] Exit");
+            Console.Write("Choose an option: ");
+        }
+
+        static int CalculateOverspendingCount(List<Transaction> transactions, double dailyBudget)
+        {
+            // Tolerance for overspending (e.g., 10%)
+            double overspendingThreshold = dailyBudget * 1.1;
+
+            // Group spending by day
+            var dailySpending = transactions
+                .Where(t => t.Source == "Spending")
+                .GroupBy(t => t.Date.Date)
+                .Select(g => g.Sum(t => t.Amount))
+                .ToList();
+
+            // Calculate overspending occurrences
+            double count = 0;
+            foreach (var spending in dailySpending)
+            {
+                if (spending > overspendingThreshold)
+                    count += 1; // Full overspending
+                else if (spending > dailyBudget)
+                    count += 0.5; // Partial overspending
+            }
+
+            return (int)count; // Return the integer part as overspending count
+        }
+
         static void ShowTransactions()
         {
             while (true)
@@ -159,7 +259,7 @@ namespace PersonalFinanceApp
                 Console.WriteLine("[3] This Year");
                 Console.WriteLine("[4] Custom Date Range");
                 Console.WriteLine("[5] Show all");
-                Console.WriteLine("[0] Return to Main Menu"); // Add an option to return to the main menu
+                Console.WriteLine("[0] Return to Main Menu");
 
                 string filterChoice = Console.ReadLine();
 
@@ -210,42 +310,41 @@ namespace PersonalFinanceApp
                 // Load transactions from all CSV files
                 var transactions = LoadTransactionsFromFiles();
 
-                // Apply the date filter and sort by date (latest to oldest)
+                // Apply the date filter
                 var filteredTransactions = transactions
                     .Where(t => t.Date >= startDate && t.Date <= endDate)
                     .OrderByDescending(t => t.Date)
                     .ToList();
 
-                // Create a Spectre.Console Table
-                var table = new Table();
-                table.Border(TableBorder.Rounded);
-                table.AddColumn("ID");
-                table.AddColumn("Session");
-                table.AddColumn("Date");
-                table.AddColumn("Flow");
-                table.AddColumn("Amount");
-                table.AddColumn("Source");
-
-                int sequentialId = 1;
-                foreach (var transaction in filteredTransactions)
+                // Action menu loop
+                while (true)
                 {
-                    table.AddRow(
-                        sequentialId++.ToString(),
-                        transaction.Session,
-                        transaction.Date.ToString("dd/MM/yyyy"),
-                        transaction.Flow,
-                        $"{transaction.Amount:N0}",
-                        transaction.Source
-                    );
+                    Console.Clear();
+                    Console.WriteLine("Select an action:");
+                    Console.WriteLine("[1] Transaction data");
+                    Console.WriteLine("[2] Summary");
+                    Console.WriteLine("[0] Return to Filter Menu");
+
+                    string actionChoice = Console.ReadLine();
+
+                    if (actionChoice == "0") // Return to Filter Menu
+                        break;
+
+                    switch (actionChoice)
+                    {
+                        case "1": // Show transaction data
+                            ShowTransactionTable(filteredTransactions);
+                            break;
+                        case "2": // Show spending summary
+                            ShowSpendingSummary(filteredTransactions);
+                            break;
+                        default:
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Invalid choice. Please try again.");
+                            Console.ResetColor();
+                            break;
+                    }
                 }
-
-                // Render the table
-                AnsiConsole.Clear();
-                AnsiConsole.MarkupLine($"[cyan]=== Transactions ({filteredTransactions.Count} records) ===[/]");
-                AnsiConsole.Write(table);
-
-                Console.WriteLine("\nPress any key to filter again...");
-                Console.ReadKey();
             }
         }
         static List<Transaction> LoadTransactionsFromFiles()
@@ -269,7 +368,8 @@ namespace PersonalFinanceApp
                             Method = spending.Method,
                             Date = spending.Date,
                             Session = spending.Session, // Directly map Session from Spending record
-                            Amount = spending.Amount
+                            Amount = spending.Amount,
+                            Note = spending.Note
                         });
                     }
                 }
@@ -292,7 +392,8 @@ namespace PersonalFinanceApp
                             Method = income.Method,
                             Date = income.Date,
                             Session = income.Session, // Directly map Session from Income record
-                            Amount = income.Amount
+                            Amount = income.Amount,
+                            Note = income.Note
                         });
                     }
                 }
@@ -315,7 +416,8 @@ namespace PersonalFinanceApp
                             Method = loan.Method,
                             Date = loan.Date,
                             Session = loan.Session, // Directly map Session from Loan record
-                            Amount = loan.Amount
+                            Amount = loan.Amount,
+                            Note = loan.Note
                         });
                     }
                 }
@@ -338,13 +440,125 @@ namespace PersonalFinanceApp
                             Method = debit.Method,
                             Date = debit.Date,
                             Session = debit.Session, // Directly map Session from Debit record
-                            Amount = debit.Amount
+                            Amount = debit.Amount,
+                            Note = debit.Note
                         });
                     }
                 }
             }
 
             return transactions;
+        }
+
+        static void ShowTransactionTable(List<Transaction> filteredTransactions)
+        {
+            // Create a Spectre.Console Table
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("ID");
+            table.AddColumn("Session");
+            table.AddColumn("Date");
+            table.AddColumn("Flow");
+            table.AddColumn("Amount");
+            table.AddColumn("Source");
+            table.AddColumn("Note");
+
+            int sequentialId = 1;
+            foreach (var transaction in filteredTransactions)
+            {
+                table.AddRow(
+                    sequentialId++.ToString(),
+                    transaction.Session,
+                    transaction.Date.ToString("dd/MM/yyyy"),
+                    transaction.Flow,
+                    $"{transaction.Amount:N0}",
+                    transaction.Source,
+                    transaction.Note ?? "N/A" // Default to "N/A" if Note is null
+                );
+            }
+
+            // Render the table
+            Console.Clear();
+            AnsiConsole.MarkupLine($"[cyan]=== Transactions ({filteredTransactions.Count} records) ===[/]");
+            AnsiConsole.Write(table);
+
+            Console.WriteLine("\nPress any key to return menu of actions...");
+            Console.ReadKey();
+        }
+
+        static void ShowSpendingSummary(List<Transaction> filteredTransactions)
+        {
+            DateTime today = DateTime.Now.Date;
+
+            // Calculate total expenditure by day (including today)
+            var expenditureByDay = filteredTransactions
+                .Where(t => t.Source == "Spending")
+                .GroupBy(t => t.Date.Date) // Group by day
+                .Select(g => new { Date = g.Key, TotalExpenditure = g.Sum(t => t.Amount) })
+                .OrderBy(g => g.Date)
+                .ToList();
+
+            // Calculate total expenditure
+            double totalExpenditure = expenditureByDay.Sum(t => t.TotalExpenditure);
+
+            // Calculate average daily expenditure (excluding today)
+            var expenditureExcludingToday = expenditureByDay
+                .Where(t => t.Date < today) // Exclude today's data for average calculation
+                .ToList();
+
+            int totalDaysExcludingToday = expenditureExcludingToday.Count;
+            double averageExpenditure = totalDaysExcludingToday > 0
+                ? expenditureExcludingToday.Sum(t => t.TotalExpenditure) / totalDaysExcludingToday
+                : 0;
+
+            // Create a Spectre.Console Table for total expenditure by day
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn("Date");
+            table.AddColumn("Expenditure");
+
+            foreach (var entry in expenditureByDay)
+            {
+                table.AddRow(entry.Date.ToString("dd/MM/yyyy"), $"{entry.TotalExpenditure:N0} VND");
+            }
+
+            // Render the table
+            Console.Clear();
+            AnsiConsole.MarkupLine("[cyan]=== Total Expenditure by Day ===[/]");
+            AnsiConsole.Write(table);
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"\nTotal Expenditure: {totalExpenditure:N0} VND");
+            Console.WriteLine($"Average Daily Expenditure (excluding today): {averageExpenditure:N0} VND");
+            Console.ResetColor();
+
+            Console.WriteLine("\nPress any key to continue...");
+            Console.ReadKey();
+        }
+
+        static double CalculateAverageDailyExpenditure(List<Transaction> transactions)
+        {
+            DateTime today = DateTime.Now.Date;
+
+            // Group expenditures by day where source is "Spending"
+            var expenditureByDay = transactions
+                .Where(t => t.Source == "Spending") // Filter by source
+                .GroupBy(t => t.Date.Date) // Group by day
+                .Select(g => new { Date = g.Key, TotalExpenditure = g.Sum(t => t.Amount) })
+                .ToList();
+
+            // Filter out today's expenditure for average calculation
+            var expenditureExcludingToday = expenditureByDay
+                .Where(e => e.Date < today) // Exclude today
+                .ToList();
+
+            // Calculate average
+            int totalDaysExcludingToday = expenditureExcludingToday.Count;
+            double averageExpenditure = totalDaysExcludingToday > 0
+                ? expenditureExcludingToday.Sum(e => e.TotalExpenditure) / totalDaysExcludingToday
+                : 0;
+
+            return averageExpenditure;
         }
 
         static void AddRecord()
@@ -1012,11 +1226,11 @@ namespace PersonalFinanceApp
             Console.WriteLine("Enter category of spending (adjusted for typical spending habits):");
             Console.WriteLine("1. Food & Groceries"); // Essential
             Console.WriteLine("2. Housing & Utilities"); // Essential
-            Console.WriteLine("3. Transportation"); // Essential for many
-            Console.WriteLine("4. Healthcare"); // Important
-            Console.WriteLine("5. Education"); // Investment
-            Console.WriteLine("6. Personal & Family Care"); // Broad category
-            Console.WriteLine("7. Social & Entertainment"); // Leisure
+            Console.WriteLine("3. Transportation"); // Essential
+            Console.WriteLine("4. Snack & Drinks"); // Optional
+            Console.WriteLine("5. Optional Spending (eating out, movie ticket, ...)");
+            Console.WriteLine("6. Healthcare"); // Important
+            Console.WriteLine("7. Education"); // Investment
             Console.WriteLine("8. Savings & Investments"); // Future-oriented
             Console.WriteLine("9. Debt Payments"); // Financial responsibility
 
@@ -1037,16 +1251,16 @@ namespace PersonalFinanceApp
                             category = "Transportation";
                             break;
                         case 4:
-                            category = "Healthcare";
+                            category = "Snack & Drinks";
                             break;
                         case 5:
-                            category = "Education";
+                            category = "Optional Spending";
                             break;
                         case 6:
-                            category = "Personal & Family Care";
+                            category = "Healthcare";
                             break;
                         case 7:
-                            category = "Social & Entertainment";
+                            category = "Education";
                             break;
                         case 8:
                             category = "Savings & Investments";
@@ -1279,7 +1493,6 @@ namespace PersonalFinanceApp
             Console.ResetColor();
         }
 
-
         static int GetValidYear()
         {
             while (true)
@@ -1332,6 +1545,7 @@ namespace PersonalFinanceApp
                 Console.WriteLine("4. View income by category");
                 Console.WriteLine("5. View loans by borrower");
                 Console.WriteLine("6. View borrowing lender");
+                Console.WriteLine("7. Set a daily budget constraint");
                 Console.WriteLine("0. Exit this menu");
                 Console.Write("Your selection: ");
 
@@ -1357,77 +1571,30 @@ namespace PersonalFinanceApp
                         case 3:
                             Console.Clear();
                             Console.WriteLine("=== Spending by Category ===");
-
-                            // Provide the Spending.csv file path
-                            const string spendingFilePath = "Spending.csv";
-
-                            if (File.Exists(spendingFilePath))
-                            {
-                                DisplaySpendingByCategory(spendingFilePath); // Call the correct function
-                            }
-                            else
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Error: Spending.csv file not found.");
-                                Console.ResetColor();
-                            }
+                            DisplaySpendingByCategory("Spending.csv");
                             break;
 
                         case 4:
                             Console.Clear();
                             Console.WriteLine("=== Income by Category ===");
-
-                            // Provide the Spending.csv file path
-                            const string incomeFilePath = "Income.csv";
-
-                            if (File.Exists(spendingFilePath))
-                            {
-                                DisplayIncomeByCategory(incomeFilePath);
-                            }
-                            else
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Error: Income.csv file not found.");
-                                Console.ResetColor();
-                            }
+                            DisplayIncomeByCategory("Income.csv");
                             break;
 
                         case 5:
                             Console.Clear();
                             Console.WriteLine("=== Loan by Borrower ===");
-
-                            // Provide the Spending.csv file path
-                            const string loanFilePath = "Loan.csv";
-
-                            if (File.Exists(spendingFilePath))
-                            {
-                                DisplayLoansByBorrower(loanFilePath);
-                            }
-                            else
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Error: Loan.csv file not found.");
-                                Console.ResetColor();
-                            }
+                            DisplayLoansByBorrower("Loan.csv");
                             break;
 
                         case 6:
                             Console.Clear();
                             Console.WriteLine("=== Debit by Lender ===");
+                            DisplayDebitByLender("Debit.csv");
+                            break;
 
-                            // Provide the Spending.csv file path
-                            const string debitFilePath = "debit.csv";
-
-                            if (File.Exists(spendingFilePath))
-                            {
-                                DisplayDebitByLender(debitFilePath);
-                            }
-                            else
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Error: Debit.csv file not found.");
-                                Console.ResetColor();
-                            }
+                        case 7:
+                            Console.Clear();
+                            SetDailyBudgetConstraint(filteredTransactions, month, year); // Pass the month and year
                             break;
 
                         case 0:
@@ -1455,7 +1622,6 @@ namespace PersonalFinanceApp
                 }
             }
         }
-
 
         static void DisplaySpendingByCategory(string spendingFilePath)
         {
@@ -1505,7 +1671,6 @@ namespace PersonalFinanceApp
             Console.WriteLine($"\nTotal Expenditure: {FormatCurrency(totalExpenditure)}");
             Console.ResetColor();
         }
-
         static void DisplayIncomeByCategory(string incomeFilePath)
         {
             if (!File.Exists(incomeFilePath))
@@ -1620,7 +1785,6 @@ namespace PersonalFinanceApp
             Console.WriteLine("=== Balances by Method ===\n");
             AnsiConsole.Write(table);
         }
-
 
         static void DisplayBalanceBook(List<Transaction> transactions)
         {
@@ -1747,17 +1911,109 @@ namespace PersonalFinanceApp
             Console.ResetColor();
         }
 
+        static void SetDailyBudgetConstraint(List<Transaction> filteredTransactions, int month, int year)
+        {
+            // Ensure the average expenditure is calculated using filtered transactions
+            double averageExpenditure = CalculateAverageDailyExpenditure(filteredTransactions);
 
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"Average Daily Expenditure (excluding today): {averageExpenditure:N0} VND");
+            Console.ResetColor();
+
+            Console.WriteLine("\nSet a daily budget constraint:");
+            Console.WriteLine("1. Use current average daily expenditure as the budget constraint");
+            Console.WriteLine("2. Set a fixed daily expenditure constraint");
+            Console.WriteLine("0. Return to Budget Menu");
+            Console.Write("Your selection: ");
+
+            double dailyBudgetConstraint = 0;
+            if (int.TryParse(Console.ReadLine(), out int budgetChoice))
+            {
+                switch (budgetChoice)
+                {
+                    case 1:
+                        dailyBudgetConstraint = averageExpenditure;
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine($"Daily Budget Constraint set to: {dailyBudgetConstraint:N0} VND");
+                        Console.ResetColor();
+                        break;
+
+                    case 2:
+                        Console.Write("Enter your desired daily budget constraint: ");
+                        while (!double.TryParse(Console.ReadLine(), out dailyBudgetConstraint) || dailyBudgetConstraint <= 0)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Invalid input. Please enter a positive number.");
+                            Console.ResetColor();
+                        }
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine($"Daily Budget Constraint set to: {dailyBudgetConstraint:N0} VND");
+                        Console.ResetColor();
+                        break;
+
+                    case 0:
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("Returning to Budget Menu...");
+                        Console.ResetColor();
+                        return;
+
+                    default:
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid choice. Returning to Budget Menu.");
+                        Console.ResetColor();
+                        return;
+                }
+            }
+
+            if (dailyBudgetConstraint > 0)
+            {
+                Console.Write("\nHow many times of overspending should trigger a reminder? (Default: 3): ");
+                int maxOverspendingCount;
+                if (!int.TryParse(Console.ReadLine(), out maxOverspendingCount) || maxOverspendingCount <= 0)
+                {
+                    maxOverspendingCount = 3;
+                }
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"Overspending Reminder set to trigger after {maxOverspendingCount} times.");
+                Console.ResetColor();
+
+                // Save the daily budget constraint and max overspending count
+                SaveDailyBudgetConstraint(dailyBudgetConstraint, maxOverspendingCount, month, year);
+            }
+        }
+
+        static void SaveDailyBudgetConstraint(double constraint, int overspendLimit, int month, int year)
+        {
+            const string fileName = "DailyBudgetConstraints.csv";
+
+            bool fileExists = File.Exists(fileName);
+            using (var writer = new StreamWriter(fileName, append: true))
+            {
+                if (!fileExists)
+                {
+                    // Write headers if file is new
+                    writer.WriteLine("Month,Year,Constraint,MaxOverspendLimit");
+                }
+
+                // Save the constraint data
+                writer.WriteLine($"{month},{year},{constraint},{overspendLimit}");
+            }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Daily Budget Constraint saved successfully!");
+            Console.ResetColor();
+        }
         static double CalculateTotalBalance(List<Transaction> transactions)
         {
             return transactions.Where(t => t.Flow == "IN").Sum(t => t.Amount) -
                    transactions.Where(t => t.Flow == "OUT").Sum(t => t.Amount);
         }
+
         static string FormatCurrency(double amount)
         {
             return $"{amount:N0}".Replace(",", ".") + " vnd";
         }
-
         static void DisplayTransactions(List<Transaction> transactions)
         {
             foreach (var t in transactions)
@@ -1767,32 +2023,40 @@ namespace PersonalFinanceApp
         }
         static void ShowSaving()
         {
+            const string transactionFilePath = "Transaction.csv";
+
+            // Ensure Transaction.csv exists; only create it if missing
+            if (!File.Exists(transactionFilePath))
+            {
+                CreateTransactionFile(transactionFilePath);
+            }
+
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("=== Saving ===");
             Console.ResetColor();
             Console.WriteLine("Please choose an action:");
-            Console.WriteLine("1. Set a daily spending constraint");
-            Console.WriteLine("2. Set up a financial plan (scenario)");
-            Console.WriteLine("3. Use spending forecast function");
-            Console.WriteLine("4. Use spending suggestions function");
+            Console.WriteLine("1. Set up a financial plan (scenario)");
+            Console.WriteLine("2. Use spending forecast function");
+            Console.WriteLine("3. Use spending suggestions function");
             Console.WriteLine("0. Return to Main Menu");
 
             int choice = GetSavingMenuSelection();
 
-            // Stub for next steps; this can be expanded later to call specific functions
+            // Retrieve required data for the Scenario function
+            double currentBalance = GetCurrentBalance(transactionFilePath);
+            double dailyAverageExpenditure = CalculateAverageDailyExpenditure(transactionFilePath);
+
+            // Menu handling
             switch (choice)
             {
                 case 1:
-                    Console.WriteLine("Set a daily spending constraint - functionality coming soon.");
+                    Scenario(currentBalance, dailyAverageExpenditure);
                     break;
                 case 2:
-                    Console.WriteLine("Set up a financial plan (scenario) - functionality coming soon.");
+                    SpendingForecast(transactionFilePath);
                     break;
                 case 3:
-                    Console.WriteLine("Use spending forecast function - functionality coming soon.");
-                    break;
-                case 4:
                     Console.WriteLine("Use spending suggestions function - functionality coming soon.");
                     break;
                 case 0:
@@ -1802,7 +2066,346 @@ namespace PersonalFinanceApp
                     Console.WriteLine("Invalid selection.");
                     break;
             }
+
+            Console.WriteLine("\nPress any key to return to the main menu...");
+            Console.ReadKey();
         }
+
+        static void CreateTransactionFile(string transactionFilePath)
+        {
+            // Load transactions from individual CSV files
+            var transactions = LoadTransactionsFromFiles();
+
+            // Write the transactions to Transaction.csv (overwrite instead of append)
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = true
+            };
+
+            try
+            {
+                using (var writer = new StreamWriter(transactionFilePath, append: false)) // Overwrite mode
+                using (var csvWriter = new CsvWriter(writer, config))
+                {
+                    // Write header
+                    csvWriter.WriteHeader<Transaction>();
+                    csvWriter.NextRecord();
+
+                    // Write transactions
+                    csvWriter.WriteRecords(transactions);
+                }
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"Transaction data successfully written to {transactionFilePath}");
+                Console.ResetColor();
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error writing to CSV: {ex.Message}");
+                Console.ResetColor();
+            }
+        }
+
+        static int GetSavingMenuSelection()
+        {
+            while (true)
+            {
+                Console.Write("Your selection: ");
+                if (int.TryParse(Console.ReadLine(), out int choice) && choice >= 0 && choice <= 3)
+                {
+                    return choice;
+                }
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Invalid input. Please select a number between 0 and 3.");
+                Console.ResetColor();
+            }
+        }
+
+
+        // Example implementation for GetCurrentBalance
+        static double GetCurrentBalance(string transactionFilePath)
+        {
+            if (!File.Exists(transactionFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error: {transactionFilePath} not found.");
+                Console.ResetColor();
+                return 0;
+            }
+
+            // Load transactions from file
+            List<Transaction> transactions;
+            using (var reader = new StreamReader(transactionFilePath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                transactions = csv.GetRecords<Transaction>().ToList();
+            }
+
+            // Get current month and year
+            int currentMonth = DateTime.Now.Month;
+            int currentYear = DateTime.Now.Year;
+
+            // Filter transactions for the current month and year
+            var filteredTransactions = transactions
+                .Where(t => t.Date.Month == currentMonth && t.Date.Year == currentYear)
+                .ToList();
+
+            // Calculate balance
+            return filteredTransactions.Where(t => t.Flow == "IN").Sum(t => t.Amount) -
+                   filteredTransactions.Where(t => t.Flow == "OUT").Sum(t => t.Amount);
+        }
+
+        // Example implementation for CalculateAverageDailyExpenditure
+        static double CalculateAverageDailyExpenditure(string transactionFilePath)
+        {
+            if (!File.Exists(transactionFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error: {transactionFilePath} not found.");
+                Console.ResetColor();
+                return 0;
+            }
+
+            // Load transactions from file
+            List<Transaction> transactions;
+            using (var reader = new StreamReader(transactionFilePath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                transactions = csv.GetRecords<Transaction>().ToList();
+            }
+
+            // Get current month and year
+            int currentMonth = DateTime.Now.Month;
+            int currentYear = DateTime.Now.Year;
+            DateTime today = DateTime.Now.Date;
+
+            // Filter transactions for the current month and year
+            var filteredTransactions = transactions
+                .Where(t => t.Date.Month == currentMonth && t.Date.Year == currentYear && t.Source == "Spending")
+                .GroupBy(t => t.Date.Date) // Group by day
+                .Select(g => new { Date = g.Key, TotalExpenditure = g.Sum(t => t.Amount) })
+                .OrderBy(g => g.Date)
+                .ToList();
+
+            // Calculate average daily expenditure excluding today
+            var expenditureExcludingToday = filteredTransactions
+                .Where(t => t.Date < today) // Exclude today's data
+                .ToList();
+
+            int totalDaysExcludingToday = expenditureExcludingToday.Count;
+            return totalDaysExcludingToday > 0
+                ? expenditureExcludingToday.Sum(t => t.TotalExpenditure) / totalDaysExcludingToday
+                : 0;
+        }
+
+        static void Scenario(double currentBalance, double dailyAverageExpenditure)
+        {
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine("=== Budget Scenario Planning ===");
+                Console.ResetColor();
+
+                DateTime today = DateTime.Now.Date;
+                int daysInMonth = DateTime.DaysInMonth(today.Year, today.Month);
+                DateTime endOfMonth = new DateTime(today.Year, today.Month, daysInMonth);
+
+                Console.WriteLine($"Today is {today:dd/MM/yyyy}");
+                Console.WriteLine($"Your current balance: {currentBalance:N0} VND");
+                Console.WriteLine($"Your daily average expenditure: {dailyAverageExpenditure:N0} VND");
+
+                var futureEvents = new List<FinancialEvent>();
+
+                while (true)
+                {
+                    Console.WriteLine("\nAdd a financial event in the future:");
+                    Console.WriteLine("1. Spending");
+                    Console.WriteLine("2. Debit");
+                    Console.WriteLine("3. Loan");
+                    Console.WriteLine("0. Finish adding events");
+                    Console.Write("Your selection: ");
+                    string choice = Console.ReadLine();
+
+                    if (choice == "0") break;
+
+                    string eventType = choice switch
+                    {
+                        "1" => "Spending",
+                        "2" => "Debit",
+                        "3" => "Loan",
+                        _ => null
+                    };
+
+                    if (eventType == null)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid choice. Please try again.");
+                        Console.ResetColor();
+                        continue;
+                    }
+
+                    Console.Write($"Enter the amount for {eventType.ToLower()} (e.g., 200000): ");
+                    if (!double.TryParse(Console.ReadLine(), out double amount) || amount <= 0)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid amount. Please try again.");
+                        Console.ResetColor();
+                        continue;
+                    }
+
+                    Console.Write($"Enter the date for {eventType.ToLower()} (dd/MM/yyyy) (within {today:dd/MM/yyyy} - {endOfMonth:dd/MM/yyyy}): ");
+                    if (!DateTime.TryParse(Console.ReadLine(), out DateTime eventDate) || eventDate < today || eventDate > endOfMonth)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid date. Please try again.");
+                        Console.ResetColor();
+                        continue;
+                    }
+
+                    futureEvents.Add(new FinancialEvent
+                    {
+                        Date = eventDate,
+                        Type = eventType,
+                        Amount = amount
+                    });
+
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"{eventType} of {amount:N0} VND on {eventDate:dd/MM/yyyy} added successfully!");
+                    Console.ResetColor();
+                }
+
+                // Calculate future balance
+                double futureBalance = currentBalance;
+                if (futureEvents.Any())
+                {
+                    foreach (var eventDate in futureEvents.Select(e => e.Date).Distinct().OrderBy(d => d))
+                    {
+                        int daysToEvent = (eventDate - today).Days;
+                        double dailyExpenditureTotal = daysToEvent * dailyAverageExpenditure;
+
+                        double eventImpact = futureEvents
+                            .Where(e => e.Date == eventDate)
+                            .Sum(e => e.Type == "Debit" ? e.Amount : -e.Amount);
+
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine($"\nOn {eventDate:dd/MM/yyyy}:");
+                        Console.WriteLine($"  Daily Expenditure Total: {dailyExpenditureTotal:N0} VND");
+                        Console.WriteLine($"  Event Impact: {eventImpact:N0} VND");
+
+                        futureBalance -= dailyExpenditureTotal;
+                        futureBalance += eventImpact;
+
+                        Console.WriteLine($"  Balance After Events: {futureBalance:N0} VND");
+                    }
+                }
+                else
+                {
+                    // If no events are added, deduct daily expenditures until the end of the month
+                    int remainingDays = (endOfMonth - today).Days;
+                    double totalDailyExpenditure = remainingDays * dailyAverageExpenditure;
+
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"\nNo events added. Deducting total daily expenditures for the remaining {remainingDays} days.");
+                    Console.WriteLine($"  Total Daily Expenditure: {totalDailyExpenditure:N0} VND");
+
+                    futureBalance -= totalDailyExpenditure;
+                }
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"\nFinal Balance at the end of the month: {futureBalance:N0} VND");
+                Console.ResetColor();
+
+                Console.WriteLine("\nPress any key to return to the saving menu...");
+                Console.ReadKey();
+
+                // Return to ShowSaving
+                return;
+            }
+        }
+
+        static void SpendingForecast(string transactionFilePath)
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("=== Spending Forecast Function ===");
+            Console.ResetColor();
+
+            if (!File.Exists(transactionFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error: {transactionFilePath} not found.");
+                Console.ResetColor();
+                return;
+            }
+
+            DateTime today = DateTime.Now.Date;
+            DateTime startOfWeek = today.AddDays(-(int)today.DayOfWeek); // Start of the week (Sunday)
+
+            // Load transactions from all files and filter for Spending
+            var transactions = LoadTransactionsFromFiles()
+                .Where(t => t.Source == "Spending" && t.Date.Date >= startOfWeek && t.Date.Date <= today)
+                .OrderBy(t => t.Date)
+                .ToList();
+
+            if (!transactions.Any())
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No spending data available for the current week.");
+                Console.ResetColor();
+                return;
+            }
+
+            // Extract spending amounts by day
+            var spendingData = transactions
+                .GroupBy(t => t.Date.Date)
+                .Select(g => new Tuple<DateTime, double>(g.Key, g.Sum(t => t.Amount)))
+                .OrderBy(t => t.Item1)
+                .ToList();
+
+            // Convert spending amounts to an array
+            double[] amounts = spendingData.Select(t => t.Item2).ToArray();
+
+            // Calculate a 3-day moving average using MathNet.Numerics
+            var movingAverage3 = new double[amounts.Length];
+            for (int i = 0; i < amounts.Length; i++)
+            {
+                if (i < 2)
+                    movingAverage3[i] = amounts.Take(i + 1).Average(); // Average for first few days
+                else
+                    movingAverage3[i] = amounts.Skip(i - 2).Take(3).Average(); // 3-day moving average
+            }
+
+            // Predict spending for the next 7 days based on the last moving average value
+            double lastMA3 = movingAverage3.Last();
+            var forecastedSpending = new List<double>();
+            for (int i = 0; i < 7; i++)
+            {
+                forecastedSpending.Add(lastMA3);
+            }
+
+            // Display the forecast results
+            var forecastTable = new Table();
+            forecastTable.Border(TableBorder.Rounded);
+            forecastTable.AddColumn("Date");
+            forecastTable.AddColumn("Predicted Spending (VND)");
+
+            for (int i = 0; i < 7; i++)
+            {
+                DateTime futureDate = today.AddDays(i + 1);
+                forecastTable.AddRow(futureDate.ToString("dd/MM/yyyy"), $"{forecastedSpending[i]:N0}");
+            }
+
+            AnsiConsole.Clear();
+            AnsiConsole.MarkupLine("[cyan]=== Forecast for Next 7 Days ===[/]");
+            AnsiConsole.Write(forecastTable);
+
+            Console.WriteLine("\nPress any key to return to the saving menu...");
+            Console.ReadKey();
+        }
+
+
         static void SetDailySpendingConstraint(double totalIncome)
         {
             Console.Clear();
@@ -1888,19 +2491,6 @@ namespace PersonalFinanceApp
 
             return double.TryParse(input, out amount);
         }
-        static int GetSavingMenuSelection()
-        {
-            while (true)
-            {
-                Console.Write("Your selection: ");
-                if (int.TryParse(Console.ReadLine(), out int selection) && selection >= 0 && selection <= 4)
-                {
-                    return selection;
-                }
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Invalid choice. Please enter a number between 0 and 4.");
-                Console.ResetColor();
-            }
-        }
+
     }
 }
