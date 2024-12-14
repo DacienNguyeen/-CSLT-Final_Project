@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Spectre.Console;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 namespace PersonalFinanceApp
 {
     class TestHome
@@ -145,8 +146,10 @@ namespace PersonalFinanceApp
                 Console.WriteLine("2. Update Daily Constraint");
                 Console.WriteLine("3. Exit to Main Menu");
                 Console.Write("Enter your choice: ");
-
                 string choice = Console.ReadLine();
+                double exp = 0;
+                string healthStatus = string.Empty;
+                string growthStage = string.Empty;
                 switch (choice)
                 {
                     case "1":
@@ -176,6 +179,11 @@ namespace PersonalFinanceApp
                         break;
                     case "2":
                         UpdateDailyBudgetConstraint();
+                        string gamefilepath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Gameprogress.csv");
+                        string Gamefilename = "Gameprogress.csv";
+                        string Gamefilepath = Path.Combine(gamefilepath, Gamefilename);
+                        SaveGameFile(gamefilepath, exp, healthStatus, growthStage);
+                        Console.ReadKey();
                         break;
                     case "3":
                         return;
@@ -202,16 +210,31 @@ namespace PersonalFinanceApp
         static int GetReminderThreshold()
         {
             Console.Clear();
-            // Placeholder: Prompt user to set a reminder threshold if not already set
             int defaultThreshold = 5;
-            Console.Write("Enter the number of exceedances to trigger a reminder (default: 5): ");
 
-            if (int.TryParse(Console.ReadLine(), out int threshold) && threshold > 0)
+            // Ask the user if they want to change the reminder threshold
+            Console.Write($"Current reminder threshold is {defaultThreshold}. Would you like to change it? (y/n): ");
+            string userInput = Console.ReadLine().Trim().ToLower();
+
+            if (userInput == "y" || userInput == "yes")
             {
-                return threshold;
+                // Allow the user to input a new threshold
+                Console.Write($"Enter the number of exceedances to trigger a reminder (default: {defaultThreshold}): ");
+
+                if (int.TryParse(Console.ReadLine(), out int threshold) && threshold > 0)
+                {
+                    return threshold;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input. Using default threshold of 5.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Using default threshold of 5.");
             }
 
-            Console.WriteLine("Invalid input. Using default threshold of 5.");
             return defaultThreshold;
         }
         static void DisplayGardenStatus()
@@ -433,25 +456,63 @@ namespace PersonalFinanceApp
             Console.ResetColor();
             Console.WriteLine();
         }
-        static void SaveSpendingToFile(double spending)
+        static void SaveGameFile(string gamefilepath, double exp, string healthStatus, string growthStage)
         {
-            string filePath = "dailySpending.txt";
             try
             {
-                using (StreamWriter writer = new StreamWriter(filePath, append: true))
+                // Ensure the file exists, create it if not
+                if (!File.Exists(gamefilepath))
                 {
-                    writer.WriteLine($"{DateTime.Now:yyyy-MM-dd}: {spending}");
+                    using (File.Create(gamefilepath)) { }
                 }
+
+                // Create a list with the new game progress
+                List<Gameprogress> gameprogress = new List<Gameprogress>
+                {
+                    new Gameprogress
+                    {
+                        EXP = exp,
+                        Health = healthStatus,
+                        Stage = growthStage,
+                    }
+                };
+
+                // CSV configuration to ensure headers are written
+                var configGameprogresses = new CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    HasHeaderRecord = true
+                };
+
+                // Open the file and write to it
+                using (StreamWriter streamWriter = new StreamWriter(gamefilepath, true))
+                using (CsvWriter csvWriter = new CsvWriter(streamWriter, configGameprogresses))
+                {
+                    // Write the header if the file is empty
+                    if (new FileInfo(gamefilepath).Length == 0)
+                    {
+                        csvWriter.WriteHeader<Gameprogress>();
+                        csvWriter.NextRecord();  // Move to the next line after header
+                    }
+
+                    // Write the records to the CSV file
+                    csvWriter.WriteRecords(gameprogress);
+                }
+
+                Console.WriteLine("Data written to CSV successfully.");
             }
-            catch (IOException ex)
+            catch (Exception ex)
             {
-                Console.WriteLine($"Error saving to file: {ex.Message}");
-                throw;
+                Console.WriteLine($"An error occurred: {ex.Message}");
             }
         }
-
-        static void ShowTransactions()
+        public class Gameprogress
         {
+            public double EXP;
+            public string Health;
+            public string Stage;
+        }
+            static void ShowTransactions()
+            {
             while (true)
             {
                 Console.Clear();
