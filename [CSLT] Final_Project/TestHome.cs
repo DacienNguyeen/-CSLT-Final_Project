@@ -186,175 +186,176 @@ namespace PersonalFinanceApp
 
         static void DisplayGardenStatus()
         {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("=== Virtual Garden ===");
-            Console.ResetColor();
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("=== Virtual Garden ===");
+                Console.ResetColor();
 
-            // Simulate the plant growth stage
-            string[] growthStages = { "Seed Stage", "Sapling Stage", "Mature Stage" };
-            string[] healthStates = { "Healthy", "Moderate", "Ill" };
+                // Simulate the plant growth stage
+                string[] growthStages = { "Seed Stage", "Sapling Stage", "Mature Stage" };
+                string[] healthStates = { "Healthy", "Moderate", "Ill" };
+                double[] expThresholds = { 5, 10, 15 }; // EXP thresholds for stages
 
-            // Sample data for the sake of demonstration
-            double dailyBudget = 100000; // Example budget
-            double dailySpending = GetDailySpending(); // Replace with actual spending input
-            double income = GetMonthlyIncome(); // Replace with actual income input
-            double monthlySpending = GetMonthlySpending(); // Replace with actual spending input
-            double loansGiven = GetLoansGiven(); // Replace with actual loans given
-            double loansTaken = GetLoansTaken(); // Replace with actual loans taken
+                // Load data from CSV files
+                var transactions = LoadTransactionsFromFiles();
 
-            double balance = income - monthlySpending;
-            double debtBalance = loansGiven - loansTaken;
-            double savings = balance + debtBalance;
-            double savingsPercentage = (savings / income) * 100;
+                double dailyBudget = 100000;
+                double dailySpending = transactions.Where(t => t.Date.Date == DateTime.Now.Date && t.Flow == "OUT").Sum(t => t.Amount);
+                double income = transactions.Where(t => t.Flow == "IN" && t.Source == "Income").Sum(t => t.Amount);
+                double monthlySpending = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Flow == "OUT").Sum(t => t.Amount);
+                double loan = transactions.Where(t => t.Source == "Loan" && t.Flow == "OUT").Sum(t => t.Amount);
+                double debit = transactions.Where(t => t.Source == "Debit" && t.Flow == "IN").Sum(t => t.Amount);
 
-            // Daily EXP calculation
-            double exp = 0;
-            if (dailySpending <= dailyBudget)
-            {
-                exp = 1.0;
-            }
-            else if (dailySpending <= dailyBudget * 1.2)
-            {
-                exp = 0.5;
-            }
+                double balance = income - monthlySpending;
+                double debtBalance = loan - debit;
+                double savings = balance + debtBalance;
+                double savingsPercentage = (savings / income) * 100;
 
-            // Monthly Health calculation
-            string healthStatus;
-            if (savingsPercentage > 10)
-            {
-                healthStatus = healthStates[0]; // Healthy
-                exp += 1.0; // Level up bonus
-            }
-            else if (savingsPercentage >= 0)
-            {
-                healthStatus = healthStates[1]; // Moderate
-                exp += 0.5; // Limited EXP
-            }
-            else
-            {
-                healthStatus = healthStates[2]; // Ill
-            }
+                // Daily EXP calculation
+                double exp = 0;
+                if (dailySpending <= dailyBudget)
+                {
+                    exp = 1.0;
+                }
+                else if (dailySpending <= dailyBudget * 1.2)
+                {
+                    exp = 0.5;
+                }
 
-            // Determine growth stage based on EXP
-            string growthStage;
-            if (exp <= 5)
-            {
-                growthStage = growthStages[0]; // Seed Stage
-            }
-            else if (exp <= 10)
-            {
-                growthStage = growthStages[1]; // Sapling Stage
-            }
-            else
-            {
-                growthStage = growthStages[2]; // Mature Stage
-            }
+                // Monthly Health calculation
+                string healthStatus;
+                if (savingsPercentage > 10)
+                {
+                    healthStatus = healthStates[0]; // Healthy
+                    exp += 1.0; // Level up bonus
+                }
+                else if (savingsPercentage >= 0)
+                {
+                    healthStatus = healthStates[1]; // Moderate
+                    exp += 0.5; // Limited EXP
+                }
+                else
+                {
+                    healthStatus = healthStates[2]; // Ill
+                }
 
-            // Display results
-            Console.WriteLine($"Growth Stage: {growthStage}");
-            Console.WriteLine($"Health Status: {healthStatus}");
-            Console.WriteLine($"Daily Spending: {FormatCurrency(dailySpending)} / {FormatCurrency(dailyBudget)}");
-            Console.WriteLine($"Savings: {FormatCurrency(savings)} ({savingsPercentage:F2}% of income)");
-            Console.WriteLine($"Total EXP: {exp:F1}");
+                // Determine growth stage based on EXP
+                string growthStage = growthStages[0]; // Default to Seed Stage
+                if (exp > expThresholds[1])
+                {
+                    growthStage = growthStages[2]; // Mature Stage
+                }
+                else if (exp > expThresholds[0])
+                {
+                    growthStage = growthStages[1]; // Sapling Stage
+                }
 
-            // Draw the plant growth stage
-            DrawPlantGrowth(growthStage);
+                // Display results
+                Console.Clear();
+                Console.WriteLine($"Growth Stage: {growthStage}");
+                // Draw the plant growth stage
+                DrawPlantGrowth(growthStage);
+                Console.WriteLine($"Health Status: {healthStatus}");
+                // Display a health bar for health status
+                DrawHealthBar(healthStatus);
+                Console.WriteLine($"Daily Spending: {FormatCurrency(dailySpending)} / {FormatCurrency(dailyBudget)}");
+                Console.WriteLine($"Savings: {FormatCurrency(savings)} ({savingsPercentage:F2}% of income)");
+                Console.WriteLine($"Total EXP: {exp:F1}");
 
-            // Display a health bar for health status
-            DrawHealthBar(healthStatus);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("Keep tracking your spending to help your plant grow!");
+                Console.ResetColor();
 
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Keep tracking your spending to help your plant grow!");
-            Console.ResetColor();
-
-            Console.WriteLine("\nPress any key to return to the menu...");
-            Console.ReadKey();
-        }
-
-        static void DrawPlantGrowth(string growthStage)
-        {
-            Console.WriteLine();
-            switch (growthStage)
-            {
-                case "Seed Stage":
-                    Console.WriteLine("  ( )");
-                    Console.WriteLine("   | ");
-                    Console.WriteLine(@"  / \");
-                    Console.WriteLine("You poor nigga");
-                    break;
-                case "Sapling Stage":
-                    Console.WriteLine(@"   \|/");
-                    Console.WriteLine("  --*--");
-                    Console.WriteLine("   /|\\");
-                    Console.WriteLine("    | ");
-                    Console.WriteLine(@"   / \");
-                    Console.WriteLine("Keep up with your goal!");
-                    break;
-                case "Mature Stage":
-                    Console.WriteLine(@"   \|/");
-                    Console.WriteLine("  --*--");
-                    Console.WriteLine("   /|\\");
-                    Console.WriteLine("    | ");
-                    Console.WriteLine(@"   /|\");       
-                    Console.WriteLine(@"  / | \");       
-                    Console.WriteLine(@" /  |  \");
-                    Console.WriteLine("Congratulation!");
-                    break;
-            }
-            Console.WriteLine();
-        }
-
-        static void DrawHealthBar(string healthStatus)
-        {
-            Console.WriteLine();
-            Console.Write("Health: ");
-            switch (healthStatus)
-            {
-                case "Healthy":
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("[##########]");
-                    Console.WriteLine("You are healthy, keep going!");
-                    break;
-                case "Moderate":
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("[#####-----]");
-                    Console.WriteLine("Please improve your health TT~TT");
-                    break;
-                case "Ill":
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("[##--------]");
-                    Console.WriteLine("Joke's over, you're dead!");
-                    break;
-            }
-            Console.ResetColor();
-            Console.WriteLine();
-        }
-        static void UpdateDailySpending()
-        {
-            Console.Clear();
-            Console.WriteLine("=== Update Daily Spending ===");
-            Console.Write("Enter today's spending: ");
-            try
-            {
-                double spending = double.Parse(Console.ReadLine());
-                SaveSpendingToFile(spending);
-                Console.WriteLine("Daily spending updated successfully!");
-            }
-            catch (FormatException ex)
-            {
-                Console.WriteLine($"Error: Invalid input. {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
-            }
-            finally
-            {
                 Console.WriteLine("\nPress any key to return to the menu...");
                 Console.ReadKey();
-            }
         }
+
+            static void DrawPlantGrowth(string growthStage)
+            {
+                Console.WriteLine();
+                switch (growthStage)
+                {
+                    case "Seed Stage":
+                        Console.WriteLine("  ( )");
+                        Console.WriteLine("   | ");
+                        Console.WriteLine(@"  / \");
+            
+                        Console.WriteLine("You poor nigga");
+                        break;
+                    case "Sapling Stage":
+                        Console.WriteLine(@"   \|/");
+                        Console.WriteLine("  --*--");
+                        Console.WriteLine("   /|\\");
+                        Console.WriteLine("    | ");
+                        Console.WriteLine(@"   / \");
+            
+                        Console.WriteLine("Keep up with your goal!");
+                        break;
+                    case "Mature Stage":
+                        Console.WriteLine(@"   \|/");
+                        Console.WriteLine("  --*--");
+                        Console.WriteLine("   /|\\");
+                        Console.WriteLine("    | ");
+                        Console.WriteLine(@"   /|\");                  
+                        Console.WriteLine(@"  / | \");                   
+                        Console.WriteLine(@" /  |  \");            
+                        Console.WriteLine("Congratulation!");
+                        break;
+                }
+                Console.WriteLine();
+            }
+
+            static void DrawHealthBar(string healthStatus)
+            {
+                Console.WriteLine();
+                Console.Write("Health: ");
+                switch (healthStatus)
+                {
+                    case "Healthy":
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("[##########]");
+                        Console.WriteLine("You are healthy, keep going!");
+                        break;
+                    case "Moderate":
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("[#####-----]");
+                        Console.WriteLine("Please improve your health TT~TT");
+                        break;
+                    case "Ill":
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("[##--------]");
+                        Console.WriteLine("Joke's over, you're dead!");
+                        break;
+                }
+                Console.ResetColor();
+                Console.WriteLine();
+            }
+
+            static void UpdateDailySpending()
+            {
+                Console.Clear();
+                Console.WriteLine("=== Update Daily Spending ===");
+                Console.Write("Enter today's spending: ");
+                try
+                {
+                    double spending = double.Parse(Console.ReadLine());
+                    SaveSpendingToFile(spending);
+                    Console.WriteLine("Daily spending updated successfully!");
+                }
+                catch (FormatException ex)
+                {
+                    Console.WriteLine($"Error: Invalid input. {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+                }
+                finally
+                {
+                    Console.WriteLine("\nPress any key to return to the menu...");
+                    Console.ReadKey();
+                }
+            }
 
         static void SaveSpendingToFile(double spending)
         {
@@ -371,54 +372,6 @@ namespace PersonalFinanceApp
                 Console.WriteLine($"Error saving to file: {ex.Message}");
                 throw;
             }
-        }
-
-        // Placeholder functions for user inputs
-        static double GetDailySpending()
-        {
-            string filePath = "dailySpending.txt";
-            if (!File.Exists(filePath)) return 0;
-
-            string lastLine = File.ReadLines(filePath).LastOrDefault();
-            if (lastLine == null) return 0;
-
-            string[] parts = lastLine.Split(':');
-            if (parts.Length != 2 || !double.TryParse(parts[1].Trim(), out double spending))
-                return 0;
-
-            return spending;
-        }
-
-        static double GetMonthlyIncome()
-        {
-            // TODO: Replace with actual input logic
-            Console.Write("Enter your monthly income: ");
-            double.TryParse(Console.ReadLine(), out double income);
-            return income;
-        }
-
-        static double GetMonthlySpending()
-        {
-            // TODO: Replace with actual input logic
-            Console.Write("Enter your monthly spending: ");
-            double.TryParse(Console.ReadLine(), out double spending);
-            return spending;
-        }
-
-        static double GetLoansGiven()
-        {
-            // TODO: Replace with actual input logic
-            Console.Write("Enter loans given: ");
-            double.TryParse(Console.ReadLine(), out double loansGiven);
-            return loansGiven;
-        }
-
-        static double GetLoansTaken()
-        {
-            // TODO: Replace with actual input logic
-            Console.Write("Enter loans taken: ");
-            double.TryParse(Console.ReadLine(), out double loansTaken);
-            return loansTaken;
         }
 
         static void ShowTransactions()
