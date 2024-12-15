@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CsvHelper.Configuration;
 using CsvHelper;
-using ConsoleTables; 
 using Spectre.Console;
 using static System.Net.Mime.MediaTypeNames;
 using MathNet.Numerics.Statistics;
@@ -2014,13 +2013,6 @@ namespace PersonalFinanceApp
         {
             return $"{amount:N0}".Replace(",", ".") + " vnd";
         }
-        static void DisplayTransactions(List<Transaction> transactions)
-        {
-            foreach (var t in transactions)
-            {
-                Console.WriteLine($"{t.ID} | {t.Flow} | {t.Method} | {t.Date} | {t.Category} | {FormatCurrency(t.Amount)}");
-            }
-        }
         static void ShowSaving()
         {
             const string transactionFilePath = "Transaction.csv";
@@ -2031,45 +2023,51 @@ namespace PersonalFinanceApp
                 CreateTransactionFile(transactionFilePath);
             }
 
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("=== Saving ===");
-            Console.ResetColor();
-            Console.WriteLine("Please choose an action:");
-            Console.WriteLine("1. Set up a financial plan (scenario)");
-            Console.WriteLine("2. Use spending forecast function");
-            Console.WriteLine("3. Use spending suggestions function");
-            Console.WriteLine("0. Return to Main Menu");
-
-            int choice = GetSavingMenuSelection();
-
-            // Retrieve required data for the Scenario function
-            double currentBalance = GetCurrentBalance(transactionFilePath);
-            double dailyAverageExpenditure = CalculateAverageDailyExpenditure(transactionFilePath);
-
-            // Menu handling
-            switch (choice)
+            while (true) // Keep the user in the Saving menu
             {
-                case 1:
-                    Scenario(currentBalance, dailyAverageExpenditure);
-                    break;
-                case 2:
-                    SpendingForecast(transactionFilePath);
-                    break;
-                case 3:
-                    Console.WriteLine("Use spending suggestions function - functionality coming soon.");
-                    break;
-                case 0:
-                    Console.WriteLine("Returning to Main Menu...");
-                    break;
-                default:
-                    Console.WriteLine("Invalid selection.");
-                    break;
-            }
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("=== Saving ===");
+                Console.ResetColor();
+                Console.WriteLine("Please choose an action:");
+                Console.WriteLine("1. Set up a financial plan (scenario)");
+                Console.WriteLine("2. Use spending forecast function");
+                Console.WriteLine("3. Use spending suggestions function");
+                Console.WriteLine("0. Return to Main Menu");
 
-            Console.WriteLine("\nPress any key to return to the main menu...");
-            Console.ReadKey();
+                int choice = GetSavingMenuSelection();
+
+                // Retrieve required data for the Scenario function
+                double currentBalance = GetCurrentBalance(transactionFilePath);
+                double dailyAverageExpenditure = CalculateAverageDailyExpenditure(transactionFilePath);
+
+                // Menu handling
+                switch (choice)
+                {
+                    case 1:
+                        Scenario(currentBalance, dailyAverageExpenditure); // Return to ShowSaving after execution
+                        break;
+                    case 2:
+                        SpendingForecast(transactionFilePath); // Return to ShowSaving after execution
+                        break;
+                    case 3:
+                        SpendingSuggestions(transactionFilePath); // Return to ShowSaving after execution
+                        break;
+                    case 0:
+                        Console.WriteLine("Returning to Main Menu...");
+                        return; // Exit to main menu
+                    default:
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid selection. Please try again.");
+                        Console.ResetColor();
+                        break;
+                }
+
+                Console.WriteLine("\nPress any key to return to the Saving menu...");
+                Console.ReadKey();
+            }
         }
+
 
         static void CreateTransactionFile(string transactionFilePath)
         {
@@ -2106,7 +2104,6 @@ namespace PersonalFinanceApp
                 Console.ResetColor();
             }
         }
-
         static int GetSavingMenuSelection()
         {
             while (true)
@@ -2317,9 +2314,6 @@ namespace PersonalFinanceApp
                 Console.WriteLine($"\nFinal Balance at the end of the month: {futureBalance:N0} VND");
                 Console.ResetColor();
 
-                Console.WriteLine("\nPress any key to return to the saving menu...");
-                Console.ReadKey();
-
                 // Return to ShowSaving
                 return;
             }
@@ -2405,91 +2399,71 @@ namespace PersonalFinanceApp
             Console.ReadKey();
         }
 
-
-        static void SetDailySpendingConstraint(double totalIncome)
+        static void SpendingSuggestions(string transactionFilePath)
         {
             Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("=== Set a Daily Spending Constraint ===");
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("=== Spending Suggestions ===");
             Console.ResetColor();
 
-            // Default daily spending limit: 55% of income
-            double defaultLimit = totalIncome * 0.55 / 30; // Assuming 30 days in a month
-            double spendingLimit = defaultLimit;
+            DateTime today = DateTime.Now;
+            DateTime startOfMonth = new DateTime(today.Year, today.Month, 1);
+            DateTime endOfMonth = new DateTime(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
 
-            // Step 1: Ask user to input spending limit
-            while (true)
+            // Step 1: Load Transactions
+            var transactions = LoadTransactionsFromFiles(); // Use the correct function name
+
+            // Step 2: Filter for Current Month
+            var currentMonthTransactions = transactions
+                .Where(t => t.Date >= startOfMonth && t.Date <= endOfMonth)
+                .ToList();
+
+            // Step 3: Aggregate Data
+            double totalSpending = currentMonthTransactions
+                .Where(t => t.Source == "Spending")
+                .Sum(t => t.Amount);
+
+            double totalIncome = currentMonthTransactions
+                .Where(t => t.Source == "Income")
+                .Sum(t => t.Amount);
+
+            double totalLoan = currentMonthTransactions
+                .Where(t => t.Source == "Loan")
+                .Sum(t => t.Amount);
+
+            double totalDebt = currentMonthTransactions
+                .Where(t => t.Source == "Debit")
+                .Sum(t => t.Amount);
+
+            // Calculate net savings
+            double netSavings = totalIncome - totalSpending + totalLoan - totalDebt;
+
+            // Display financial breakdown
+            Console.WriteLine($"Total Spending: {totalSpending:N0} VND");
+            Console.WriteLine($"Total Income: {totalIncome:N0} VND");
+            Console.WriteLine($"Total Loan Given: {totalLoan:N0} VND");
+            Console.WriteLine($"Total Debt Taken: {totalDebt:N0} VND");
+            Console.WriteLine($"Net Saving (Spending - Income + Loan - Debt): {netSavings:N0} VND");
+
+            // Step 4: Calculate Suggestions
+            if (netSavings > 0)
             {
-                Console.Write($"Enter the daily spending limit (default: {FormatCurrency(defaultLimit)}) or leave blank: ");
-                string input = Console.ReadLine();
+                double suggestedSavingLow = netSavings * 0.1; // Save 10%
+                double suggestedSavingHigh = netSavings * 0.3; // Save 20%
 
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    spendingLimit = defaultLimit;
-                    Console.WriteLine($"Daily spending limit set to default: {FormatCurrency(spendingLimit)}");
-                    break;
-                }
-                else if (TryParseAmount(input, out double limit))
-                {
-                    spendingLimit = limit;
-                    Console.WriteLine($"Daily spending limit set to: {FormatCurrency(spendingLimit)}");
-                    break;
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Invalid input. Please enter a valid number or leave blank.");
-                    Console.ResetColor();
-                }
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"\nSuggested Monthly Saving Goal: {suggestedSavingLow:N0} - {suggestedSavingHigh:N0} VND");
+                Console.ResetColor();
             }
-
-            // Step 2: Ask user for the number of reminders
-            int defaultReminderCount = 3;
-            int reminderCount = defaultReminderCount;
-
-            while (true)
+            else
             {
-                Console.Write($"Enter the number of reminders for overspending (default: {defaultReminderCount}) or leave blank: ");
-                string input = Console.ReadLine();
-
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    reminderCount = defaultReminderCount;
-                    Console.WriteLine($"Reminder count set to default: {defaultReminderCount}");
-                    break;
-                }
-                else if (int.TryParse(input, out int count) && count > 0)
-                {
-                    reminderCount = count;
-                    Console.WriteLine($"Reminder count set to: {count}");
-                    break;
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Invalid input. Please enter a valid positive integer or leave blank.");
-                    Console.ResetColor();
-                }
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("\nYou are spending more than your income!");
+                Console.WriteLine("Suggestions:");
+                Console.WriteLine("- Reduce discretionary expenses.");
+                Console.WriteLine("- Avoid additional loans.");
+                Console.ResetColor();
             }
-
-            // Final confirmation
-            Console.WriteLine("\nSummary:");
-            Console.WriteLine($"  Daily Spending Limit: {FormatCurrency(spendingLimit)}");
-            Console.WriteLine($"  Reminder Count: {reminderCount}");
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Your spending constraint settings have been saved!");
-            Console.ResetColor();
-        }
-        static bool TryParseAmount(string input, out double amount)
-        {
-            input = input.Trim().ToLower();
-            if (input.EndsWith("k")) input = input.Replace("k", "000");
-            else if (input.EndsWith("m")) input = input.Replace("m", "000000");
-            else if (input.EndsWith("b")) input = input.Replace("b", "000000000");
-            input = input.Replace(",", "").Replace("₫", "").Trim();
-
-            return double.TryParse(input, out amount);
         }
 
     }

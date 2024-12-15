@@ -4,6 +4,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using Spectre.Console;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using Figgle;
 namespace PersonalFinanceApp
 {
     class TestHome
@@ -66,7 +67,7 @@ namespace PersonalFinanceApp
 
         }
 
-        static void Main(string[] args)
+        static void Main34(string[] args)
         {
             NavigationBar();
         }
