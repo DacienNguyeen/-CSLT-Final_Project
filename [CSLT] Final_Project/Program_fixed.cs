@@ -155,14 +155,431 @@ namespace PersonalFinanceApp
 
         static void ShowHome()
         {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("=== Home ===");
-            Console.ResetColor();
-            Console.WriteLine("Gamify your expense tracking by maintaining a streak.");
-            Console.WriteLine("TODO: Add streak tracking logic using System.DateTime");
+            string gamefilepath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Gameprogress.csv");
+            Gameprogress progress = LoadLatestGameProgress(gamefilepath);
+            int reminderThreshold = 5;
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("=== Virtual Garden Menu ===");
+                Console.ResetColor();
+                Console.WriteLine("1. View Garden Status");
+                Console.WriteLine("2. Update Daily Constraint");
+                Console.WriteLine("3. Change the Reminder Threshold");
+                Console.WriteLine("4. Exit to Main Menu");
+                Console.Write("Enter your choice: ");
+                string choice = Console.ReadLine();
+                double exp = 0;
+                string healthStatus = string.Empty;
+                string growthStage = string.Empty;
+                switch (choice)
+                {
+                    case "1":
+                        if (dailyBudgetConstraint <= 0)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Daily budget constraint is not set. Please go back to the menu and set it first.");
+                            Console.ResetColor();
+                            Console.WriteLine("\nPress any key to return to the menu...");
+                            Console.ReadKey();
+                        }
+                        else
+                        {
+                            progress = UpdateGameProgress(gamefilepath, 1.0, 0); // Example: add 1.0 EXP, no health change
+                            DisplayGardenStatus();
+                            DisplayTreeStatus(progress); // Display updated garden status
+
+                            // Reminder system: Check budget exceedances
+                            int exceedCount = CheckBudgetExceedances();
+                            if (exceedCount >= reminderThreshold)
+                            {
+                                Console.ForegroundColor = ConsoleColor.Yellow;
+                                Console.WriteLine($"Reminder: You have exceeded your daily budget {exceedCount} times this period. Please adjust your spending!");
+                                Console.ResetColor();
+                            }
+                        }
+                        break;
+                    case "2":
+                        UpdateDailyBudgetConstraint();
+                        SaveGameFile(gamefilepath, progress); // Save updated progress
+                        Console.WriteLine("Daily constraint updated. Press any key to continue...");
+                        Console.ReadKey();
+                        break;
+                    case "3":
+                        reminderThreshold = GetReminderThreshold();
+                        break;
+                    case "4":
+                        return;
+                    default:
+                        Console.WriteLine("Invalid choice. Please try again.");
+                        Console.ReadKey();
+                        break;
+                }
+            }
+        }
+        static int CheckBudgetExceedances()
+        {
+            // Placeholder implementation: Replace with actual tracking logic
+            // Example: Count the number of days in a given period where spending > dailyBudgetConstraint
+            var transactions = LoadTransactionsFromFiles();
+            var exceedances = transactions
+                .Where(t => t.Date >= DateTime.Now.AddDays(-7) && t.Flow == "OUT") // Example: last 7 days
+                .GroupBy(t => t.Date.Date)
+                .Count(g => g.Sum(t => t.Amount) > dailyBudgetConstraint);
+
+            return exceedances;
         }
 
+        static int GetReminderThreshold()
+        {
+            int defaultThreshold = 5;
+
+            // Ask the user if they want to change the reminder threshold
+            Console.Clear();
+            Console.Write($"Current reminder threshold is {defaultThreshold}. Would you like to change it? (y/n): ");
+            string userInput = Console.ReadLine().Trim().ToLower();
+
+            if (userInput == "y" || userInput == "yes")
+            {
+                // Allow the user to input a new threshold
+                Console.Write($"Enter the number of exceedances to trigger a reminder (default: {defaultThreshold}): ");
+
+                if (int.TryParse(Console.ReadLine(), out int threshold) && threshold > 0)
+                {
+                    return threshold;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input. Using default threshold of 5.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Using default threshold of 5.");
+            }
+
+            return defaultThreshold;
+        }
+        static void DisplayGardenStatus()
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("=== Virtual Garden ===");
+            Console.ResetColor();
+
+            // Simulate the plant growth stage
+            string[] growthStages = { "Seed Stage", "Sapling Stage", "Mature Stage" };
+            string[] healthStates = { "Healthy", "Moderate", "Ill" };
+            double[] expThresholds = { 5, 10, 15 }; // EXP thresholds for stages
+
+            // Load data from CSV files
+            var transactions = LoadTransactionsFromFiles();
+
+            double dailySpending = transactions.Where(t => t.Date.Date == DateTime.Now.Date && t.Flow == "OUT").Sum(t => t.Amount);
+            double income = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Flow == "IN" && t.Source == "Income").Sum(t => t.Amount);
+            double monthlySpending = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Flow == "OUT").Sum(t => t.Amount);
+            double loan = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Loan" && t.Flow == "OUT").Sum(t => t.Amount);
+            double debit = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Debit" && t.Flow == "IN").Sum(t => t.Amount);
+
+            double balance = income - monthlySpending;
+            double debtBalance = loan - debit;
+            double savings = balance + debtBalance;
+            double savingsPercentage = (savings / income) * 100;
+
+            // Daily EXP calculation
+            double exp = 0;
+            if (dailySpending <= dailyBudgetConstraint)
+            {
+                exp = 1.0;
+            }
+            else if (dailySpending <= dailyBudgetConstraint * 1.2)
+            {
+                exp = 0.5;
+            }
+
+            // Monthly Health calculation
+            string healthStatus;
+            if (savingsPercentage > 10)
+            {
+                healthStatus = healthStates[0]; // Healthy
+                exp += 1.0; // Level up bonus
+            }
+            else if (savingsPercentage >= 0)
+            {
+                healthStatus = healthStates[1]; // Moderate
+                exp += 0.5; // Limited EXP
+            }
+            else
+            {
+                healthStatus = healthStates[2]; // Ill
+            }
+
+            // Determine growth stage based on EXP
+            string growthStage = growthStages[0]; // Default to Seed Stage
+            if (exp > expThresholds[1])
+            {
+                growthStage = growthStages[2]; // Mature Stage
+            }
+            else if (exp > expThresholds[0])
+            {
+                growthStage = growthStages[1]; // Sapling Stage
+            }
+
+            // Display results
+            Console.Clear();
+            Console.WriteLine($"Growth Stage: {growthStage}");
+            // Draw the plant growth stage
+            DrawPlantGrowth(growthStage);
+            Console.WriteLine($"Health Status: {healthStatus}");
+            // Display a health bar for health status
+            DrawHealthBar(healthStatus);
+            Console.WriteLine($"Daily Spending: {FormatCurrency(dailySpending)} / {FormatCurrency(dailyBudgetConstraint)}");
+
+            // Display warning if daily budget exceeded
+            if (dailySpending > dailyBudgetConstraint)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Warning: You have exceeded your daily budget!");
+                Console.ResetColor();
+            }
+            else Console.WriteLine("Good job! Keep going :33");
+
+            Console.WriteLine($"Savings: {FormatCurrency(savings)} ({savingsPercentage:F2}% of income)");
+            Console.WriteLine($"Total EXP: {exp:F1}");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Keep tracking your spending to help your plant grow!");
+            Console.ResetColor();
+        }
+
+        static void UpdateDailyBudgetConstraint()
+        {
+            Console.Clear();
+            Console.WriteLine("=== Update Daily Budget Constraint ===");
+            while (true)
+            {
+                Console.Write("Enter your new daily budget constraint (e.g., 30k, 3m, 3b, 30.000): ");
+                string input = Console.ReadLine().Trim().ToLower();
+                try
+                {
+                    decimal multiplier = 1;
+
+                    // Handle suffix multipliers
+                    if (input.EndsWith("k")) // Handle 'k' for thousands
+                    {
+                        input = input.Substring(0, input.Length - 1);
+                        multiplier = 1000;
+                    }
+                    else if (input.EndsWith("m")) // Handle 'm' for millions
+                    {
+                        input = input.Substring(0, input.Length - 1);
+                        multiplier = 1_000_000;
+                    }
+                    else if (input.EndsWith("b")) // Handle 'b' for billions
+                    {
+                        input = input.Substring(0, input.Length - 1);
+                        multiplier = 1_000_000_000;
+                    }
+
+                    // Remove non-numeric characters (e.g., "vnd", ",", ".")
+                    string sanitizedInput = input.Replace(".", "").Replace(",", "").Replace("vnd", "").Trim();
+
+                    if (decimal.TryParse(sanitizedInput, out decimal amount))
+                    {
+                        amount *= multiplier;
+
+                        // Reject values less than or equal to 0
+                        if (amount <= 0)
+                        {
+                            throw new ArgumentOutOfRangeException("Amount must be greater than 0.");
+                        }
+
+                        dailyBudgetConstraint = (double)amount;
+                        Console.WriteLine("Daily budget constraint updated successfully!");
+                        break;
+                    }
+
+                    throw new FormatException("Invalid numeric format.");
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Invalid amount. The value must be greater than 0. Please try again.");
+                    Console.ResetColor();
+                }
+                catch (FormatException)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Invalid amount format. Please try again (e.g., 30k, 3m, 3b, 30.000).");
+                    Console.ResetColor();
+                }
+            }
+        }
+
+        static void DrawPlantGrowth(string growthStage)
+        {
+            Console.WriteLine();
+            switch (growthStage)
+            {
+                case "Seed Stage":
+                    Console.WriteLine("  ( )");
+                    Console.WriteLine("   | ");
+                    Console.WriteLine(@"  / \");
+
+                    Console.WriteLine("You poor nigga");
+                    break;
+                case "Sapling Stage":
+                    Console.WriteLine(@"   \|/");
+                    Console.WriteLine("  --*--");
+                    Console.WriteLine("   /|\\");
+                    Console.WriteLine("    | ");
+                    Console.WriteLine(@"   / \");
+
+                    Console.WriteLine("Keep up with your goal!");
+                    break;
+                case "Mature Stage":
+                    Console.WriteLine(@"   \|/");
+                    Console.WriteLine("  --*--");
+                    Console.WriteLine("   /|\\");
+                    Console.WriteLine("    | ");
+                    Console.WriteLine(@"   /|\");
+                    Console.WriteLine(@"  / | \");
+                    Console.WriteLine(@" /  |  \");
+                    Console.WriteLine("Congratulation!");
+                    break;
+            }
+            Console.WriteLine();
+        }
+
+        static void DrawHealthBar(string healthStatus)
+        {
+            Console.WriteLine();
+            Console.Write("Health: ");
+            switch (healthStatus)
+            {
+                case "Healthy":
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("[##########]");
+                    Console.WriteLine("You are healthy, keep going!");
+                    break;
+                case "Moderate":
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("[#####-----]");
+                    Console.WriteLine("Please improve your health TT~TT");
+                    break;
+                case "Ill":
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("[##--------]");
+                    Console.WriteLine("Joke's over, you're dead!");
+                    break;
+            }
+            Console.ResetColor();
+            Console.WriteLine();
+        }
+        static Gameprogress UpdateGameProgress(string gamefilepath, double expChange, double healthChange)
+        {
+            var progress = LoadLatestGameProgress(gamefilepath);
+
+            // Update EXP and Health
+            progress.EXP += expChange;
+            progress.Health = (int)Math.Clamp(progress.Health + healthChange, 0, 100);
+
+            // Level up logic
+            if (progress.EXP >= 10 && progress.Stage == "Seed Stage")
+                progress.Stage = "Sapling Stage";
+
+            if (progress.EXP >= 20 && progress.Stage == "Sapling Stage")
+                progress.Stage = "Mature Stage";
+
+            // Check if max level and stage reached
+            if (progress.Stage == "Mature Stage" && progress.EXP >= 30)
+            {
+                // Parse Trees (CSV) into a List<string>
+                var trees = string.IsNullOrEmpty(progress.Trees)
+                    ? new List<string>()
+                    : progress.Trees.Split(',').ToList();
+
+                trees.Add($"Tree {trees.Count + 1}: Mature");
+
+                // Serialize the updated list back into a CSV string
+                progress.Trees = string.Join(",", trees);
+
+                // Reset for a new tree
+                progress.EXP = 0;
+                progress.Stage = "Seed Stage";
+            }
+
+            SaveGameFile(gamefilepath, progress);
+            return progress;
+        }
+        static Gameprogress LoadLatestGameProgress(string gamefilepath)
+        {
+            if (!File.Exists(gamefilepath))
+            {
+                // Return a default progress if no file exists
+                return new Gameprogress { EXP = 0, Health = 100, Stage = "Seed Stage" };
+            }
+
+            using (var reader = new StreamReader(gamefilepath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                var records = csv.GetRecords<Gameprogress>().ToList();
+                return records.LastOrDefault() ?? new Gameprogress { EXP = 0, Health = 100, Stage = "Seed Stage" };
+            }
+        }
+        static void DisplayTreeStatus(Gameprogress progress)
+        {
+            // Parse trees from CSV (comma-separated values)
+            var trees = string.IsNullOrEmpty(progress.Trees)
+                ? new List<string>()
+                : progress.Trees.Split(',').ToList();
+
+            // Display trees in a grid format (up to 5 per row)
+            int count = 0;
+            foreach (var tree in trees)
+            {
+                Console.Write($"| {tree} ");
+                count++;
+                if (count % 5 == 0) Console.WriteLine("|"); // New line after 5 trees
+            }
+
+            if (count % 5 != 0) Console.WriteLine("|"); // Close the last row if incomplete
+
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey();
+        }
+        static void SaveGameFile(string gamefilepath, Gameprogress progress)
+        {
+            bool fileExists = File.Exists(gamefilepath);
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = !fileExists
+            };
+
+            using (var writer = new StreamWriter(gamefilepath, append: true))
+            using (var csvWriter = new CsvWriter(writer, config))
+            {
+                if (!fileExists)
+                {
+                    csvWriter.WriteHeader<Gameprogress>();
+                    csvWriter.NextRecord();
+                }
+
+                csvWriter.WriteRecord(progress);
+                csvWriter.NextRecord();
+            }
+
+            Console.WriteLine("Game progress saved successfully.");
+        }
+        public class Gameprogress
+        {
+            public double EXP { get; set; }
+            public int Health { get; set; }    // Health is an integer
+            public string Stage { get; set; }
+            public string Trees { get; set; } // Comma-separated list of trees
+        }
         static void Home_ShowReminder(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
         {
             Console.Clear();
