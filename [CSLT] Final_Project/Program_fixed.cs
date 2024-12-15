@@ -23,7 +23,6 @@ namespace PersonalFinanceApp
             public string Session { get; set; }
             public DateTime Date { get; set; }
 
-            public string Category { get; set; }
             public double Amount { get; set; }
             public string Note { get; set; }
         }
@@ -37,7 +36,6 @@ namespace PersonalFinanceApp
             public string Category { get; set; }
             public string Note { get; set; }
         }
-
         public class Income
         {
             public int ID { get; set; }
@@ -48,7 +46,6 @@ namespace PersonalFinanceApp
             public string Category { get; set; }
             public string Note { get; set; }
         }
-
         public class Loan
         {
             public int ID { get; set; }
@@ -70,26 +67,16 @@ namespace PersonalFinanceApp
             public string Note { get; set; }
 
         }
-
-        class OutFlowEvent
-        {
-            public DateTime Date { get; set; }
-            public string Type { get; set; } // "Spending", "Loan"
-            public double Amount { get; set; }
-        }
-
         public class FinancialEvent
         {
             public DateTime Date { get; set; } // Date of the financial event
             public string Type { get; set; }   // Type of event (e.g., Spending, Debit, Loan)
             public double Amount { get; set; } // Amount of the event
         }
-
         static void Main(string[] args)
         {
             NavigationBar();
         }
-
         static void NavigationBar()
         {
             while (true)
@@ -152,7 +139,6 @@ namespace PersonalFinanceApp
                 }
             }
         }
-
         static void ShowHome()
         {
             Console.Clear();
@@ -161,6 +147,7 @@ namespace PersonalFinanceApp
             Console.ResetColor();
             Console.WriteLine("Gamify your expense tracking by maintaining a streak.");
             Console.WriteLine("TODO: Add streak tracking logic using System.DateTime");
+            //Home_ShowReminder();
         }
 
         static void Home_ShowReminder(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
@@ -320,7 +307,7 @@ namespace PersonalFinanceApp
                 {
                     Console.Clear();
                     Console.WriteLine("Select an action:");
-                    Console.WriteLine("[1] Transaction data");
+                    Console.WriteLine("[1] Show Transaction data");
                     Console.WriteLine("[2] Summary");
                     Console.WriteLine("[0] Return to Filter Menu");
 
@@ -1117,7 +1104,6 @@ namespace PersonalFinanceApp
                 Console.ResetColor();
             }
         }
-
         static decimal ReadDecimalInput()
         {
             while (true)
@@ -1177,7 +1163,6 @@ namespace PersonalFinanceApp
                 }
             }
         }
-
         static string GetMethod()
         {
             string method = "";
@@ -1218,7 +1203,6 @@ namespace PersonalFinanceApp
             } while (method == "");
             return method;
         }
-
         static string GetSpendingCategory()
         {
             string category = "";
@@ -1279,7 +1263,6 @@ namespace PersonalFinanceApp
             } while (category == "");
             return category;
         }
-
         static string GetIncomeCategory()
         {
             string category = "";
@@ -1337,7 +1320,6 @@ namespace PersonalFinanceApp
 
             return category;
         }
-
         static string GetValidName()
         {
             string name = "";
@@ -1361,13 +1343,11 @@ namespace PersonalFinanceApp
 
             return name;
         }
-
         static string FormatCurrency(decimal amount)
         {
             // Format as Vietnamese currency with dot separator and add ₫ symbol
             return $"{amount:N0}".Replace(",", ".");
         }
-
         static string GetSessionOfDay()
         {
             Console.WriteLine("\nPlease choose a session of the day:");
@@ -1399,7 +1379,6 @@ namespace PersonalFinanceApp
                 }
             }
         }
-
         static DateTime GetDateInput(string prompt)
         {
             Console.Write(prompt);
@@ -1422,7 +1401,6 @@ namespace PersonalFinanceApp
             Console.ResetColor();
             return DateTime.Now;
         }
-
         static void ShowBudget()
         {
             Console.Clear();
@@ -1491,7 +1469,6 @@ namespace PersonalFinanceApp
             Console.WriteLine("Thank you for using the budget tool!");
             Console.ResetColor();
         }
-
         static int GetValidYear()
         {
             while (true)
@@ -1507,7 +1484,6 @@ namespace PersonalFinanceApp
                 Console.ResetColor();
             }
         }
-
         static int GetValidMonth()
         {
             while (true)
@@ -1523,7 +1499,6 @@ namespace PersonalFinanceApp
                 Console.ResetColor();
             }
         }
-
         static void PerformNextAction(List<Transaction> filteredTransactions, int month, int year)
         {
             while (true)
@@ -1543,7 +1518,7 @@ namespace PersonalFinanceApp
                 Console.WriteLine("3. View spending by category");
                 Console.WriteLine("4. View income by category");
                 Console.WriteLine("5. View loans by borrower");
-                Console.WriteLine("6. View borrowing lender");
+                Console.WriteLine("6. View borrowing by lender");
                 Console.WriteLine("7. Set a daily budget constraint");
                 Console.WriteLine("0. Exit this menu");
                 Console.Write("Your selection: ");
@@ -1621,7 +1596,6 @@ namespace PersonalFinanceApp
                 }
             }
         }
-
         static void DisplaySpendingByCategory(string spendingFilePath)
         {
             if (!File.Exists(spendingFilePath))
@@ -1720,7 +1694,6 @@ namespace PersonalFinanceApp
             Console.ResetColor();
 
         }
-
         static int GetYorN_Selection()
         {
             while (true)
@@ -1756,12 +1729,10 @@ namespace PersonalFinanceApp
             }
             return false;
         }
-
         static List<Transaction> FilterByMonthYear(List<Transaction> transactions, int month, int year)
         {
             return transactions.Where(t => t.Date.Month == month && t.Date.Year == year).ToList();
         }
-
         static void DisplayBalancesByMethod(List<Transaction> transactions)
         {
             var balances = transactions
@@ -1784,7 +1755,6 @@ namespace PersonalFinanceApp
             Console.WriteLine("=== Balances by Method ===\n");
             AnsiConsole.Write(table);
         }
-
         static void DisplayBalanceBook(List<Transaction> transactions)
         {
             double lending = transactions
@@ -2032,7 +2002,7 @@ namespace PersonalFinanceApp
                 Console.WriteLine("Please choose an action:");
                 Console.WriteLine("1. Set up a financial plan (scenario)");
                 Console.WriteLine("2. Use spending forecast function");
-                Console.WriteLine("3. Use spending suggestions function");
+                Console.WriteLine("3. Use saving suggestions function");
                 Console.WriteLine("0. Return to Main Menu");
 
                 int choice = GetSavingMenuSelection();
@@ -2067,8 +2037,6 @@ namespace PersonalFinanceApp
                 Console.ReadKey();
             }
         }
-
-
         static void CreateTransactionFile(string transactionFilePath)
         {
             // Load transactions from individual CSV files
@@ -2118,7 +2086,6 @@ namespace PersonalFinanceApp
                 Console.ResetColor();
             }
         }
-
 
         // Example implementation for GetCurrentBalance
         static double GetCurrentBalance(string transactionFilePath)
