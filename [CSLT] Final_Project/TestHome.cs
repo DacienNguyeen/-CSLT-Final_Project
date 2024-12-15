@@ -1,11 +1,8 @@
 ﻿using System.Globalization;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Spectre.Console;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using Figgle;
 namespace PersonalFinanceApp
 {
     class TestHome
@@ -68,7 +65,7 @@ namespace PersonalFinanceApp
 
         }
 
-        static void Main34(string[] args)
+        static void Main1(string[] args)
         {
             NavigationBar();
         }
@@ -140,7 +137,7 @@ namespace PersonalFinanceApp
         {
             string gamefilepath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Gameprogress.csv");
             Gameprogress progress = LoadLatestGameProgress(gamefilepath);
-            int reminderThreshold = 5;  
+            int reminderThreshold = 5;
             while (true)
             {
                 Console.Clear();
@@ -558,13 +555,13 @@ namespace PersonalFinanceApp
         }
         public class Gameprogress
         {
-            public double EXP {  get; set; }
+            public double EXP { get; set; }
             public int Health { get; set; }    // Health is an integer
-            public string Stage {  get; set; }
+            public string Stage { get; set; }
             public string Trees { get; set; } // Comma-separated list of trees
         }
         static void ShowTransactions()
-            {
+        {
             while (true)
             {
                 Console.Clear();

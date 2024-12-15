@@ -8,11 +8,13 @@ using static System.Net.Mime.MediaTypeNames;
 using MathNet.Numerics.Statistics;
 using Accord.Statistics.Models.Regression;
 using Accord.Statistics.Models.Regression.Linear;
+using System.Data;
 
 namespace PersonalFinanceApp
 {
     class Program2
     {
+        static double dailyBudgetConstraint;
         public class Transaction
         {
             public int ID { get; set; }
@@ -26,6 +28,10 @@ namespace PersonalFinanceApp
             public string Category { get; set; }
             public double Amount { get; set; }
             public string Note { get; set; }
+            public int Month { get; set; }
+            public int Year { get; set; }
+            public double Constraint { get; set; }
+            public int OverSpendLimit { get; set; }
         }
         public class Spending
         {
@@ -69,6 +75,13 @@ namespace PersonalFinanceApp
             public string Lender { get; set; }
             public string Note { get; set; }
 
+        }
+        public class DailyBudgetConstraint
+        {
+            public int Month { get; set; }
+            public int Year { get; set; }
+            public double Constraint { get; set; }
+            public int OverSpendLimit { get; set; }
         }
 
         class OutFlowEvent
@@ -165,9 +178,8 @@ namespace PersonalFinanceApp
                 Console.WriteLine("=== Virtual Garden Menu ===");
                 Console.ResetColor();
                 Console.WriteLine("1. View Garden Status");
-                Console.WriteLine("2. Update Daily Constraint");
-                Console.WriteLine("3. Change the Reminder Threshold");
-                Console.WriteLine("4. Exit to Main Menu");
+                Console.WriteLine("2. Change the Reminder Threshold");
+                Console.WriteLine("3 . Exit to Main Menu");
                 Console.Write("Enter your choice: ");
                 string choice = Console.ReadLine();
                 double exp = 0;
@@ -176,17 +188,7 @@ namespace PersonalFinanceApp
                 switch (choice)
                 {
                     case "1":
-                        if (dailyBudgetConstraint <= 0)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("Daily budget constraint is not set. Please go back to the menu and set it first.");
-                            Console.ResetColor();
-                            Console.WriteLine("\nPress any key to return to the menu...");
-                            Console.ReadKey();
-                        }
-                        else
-                        {
-                            progress = UpdateGameProgress(gamefilepath, 1.0, 0); // Example: add 1.0 EXP, no health change
+                        progress = UpdateGameProgress(gamefilepath, 1.0, 0); // Example: add 1.0 EXP, no health change
                             DisplayGardenStatus();
                             DisplayTreeStatus(progress); // Display updated garden status
 
@@ -198,18 +200,14 @@ namespace PersonalFinanceApp
                                 Console.WriteLine($"Reminder: You have exceeded your daily budget {exceedCount} times this period. Please adjust your spending!");
                                 Console.ResetColor();
                             }
-                        }
-                        break;
-                    case "2":
-                        UpdateDailyBudgetConstraint();
                         SaveGameFile(gamefilepath, progress); // Save updated progress
                         Console.WriteLine("Daily constraint updated. Press any key to continue...");
                         Console.ReadKey();
                         break;
-                    case "3":
+                    case "2":
                         reminderThreshold = GetReminderThreshold();
                         break;
-                    case "4":
+                    case "3":
                         return;
                     default:
                         Console.WriteLine("Invalid choice. Please try again.");
@@ -217,49 +215,6 @@ namespace PersonalFinanceApp
                         break;
                 }
             }
-        }
-        static int CheckBudgetExceedances()
-        {
-            // Placeholder implementation: Replace with actual tracking logic
-            // Example: Count the number of days in a given period where spending > dailyBudgetConstraint
-            var transactions = LoadTransactionsFromFiles();
-            var exceedances = transactions
-                .Where(t => t.Date >= DateTime.Now.AddDays(-7) && t.Flow == "OUT") // Example: last 7 days
-                .GroupBy(t => t.Date.Date)
-                .Count(g => g.Sum(t => t.Amount) > dailyBudgetConstraint);
-
-            return exceedances;
-        }
-
-        static int GetReminderThreshold()
-        {
-            int defaultThreshold = 5;
-
-            // Ask the user if they want to change the reminder threshold
-            Console.Clear();
-            Console.Write($"Current reminder threshold is {defaultThreshold}. Would you like to change it? (y/n): ");
-            string userInput = Console.ReadLine().Trim().ToLower();
-
-            if (userInput == "y" || userInput == "yes")
-            {
-                // Allow the user to input a new threshold
-                Console.Write($"Enter the number of exceedances to trigger a reminder (default: {defaultThreshold}): ");
-
-                if (int.TryParse(Console.ReadLine(), out int threshold) && threshold > 0)
-                {
-                    return threshold;
-                }
-                else
-                {
-                    Console.WriteLine("Invalid input. Using default threshold of 5.");
-                }
-            }
-            else
-            {
-                Console.WriteLine("Using default threshold of 5.");
-            }
-
-            return defaultThreshold;
         }
         static void DisplayGardenStatus()
         {
@@ -276,6 +231,7 @@ namespace PersonalFinanceApp
             // Load data from CSV files
             var transactions = LoadTransactionsFromFiles();
 
+            double dailyBudgetConstraint = transactions.Where(t => t.Month == DateTime.Now.Month && t.Year == DateTime.Now.Year).Sum(t => t.Constraint);
             double dailySpending = transactions.Where(t => t.Date.Date == DateTime.Now.Date && t.Flow == "OUT").Sum(t => t.Amount);
             double income = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Flow == "IN" && t.Source == "Income").Sum(t => t.Amount);
             double monthlySpending = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Flow == "OUT").Sum(t => t.Amount);
@@ -352,71 +308,49 @@ namespace PersonalFinanceApp
             Console.WriteLine("Keep tracking your spending to help your plant grow!");
             Console.ResetColor();
         }
-
-        static void UpdateDailyBudgetConstraint()
+        static int CheckBudgetExceedances()
         {
-            Console.Clear();
-            Console.WriteLine("=== Update Daily Budget Constraint ===");
-            while (true)
-            {
-                Console.Write("Enter your new daily budget constraint (e.g., 30k, 3m, 3b, 30.000): ");
-                string input = Console.ReadLine().Trim().ToLower();
-                try
-                {
-                    decimal multiplier = 1;
+            // Placeholder implementation: Replace with actual tracking logic
+            // Example: Count the number of days in a given period where spending > dailyBudgetConstraint
+            var transactions = LoadTransactionsFromFiles();
+            var exceedances = transactions
+                .Where(t => t.Date >= DateTime.Now.AddDays(-7) && t.Flow == "OUT") // Example: last 7 days
+                .GroupBy(t => t.Date.Date)
+                .Count(g => g.Sum(t => t.Amount) > dailyBudgetConstraint);
 
-                    // Handle suffix multipliers
-                    if (input.EndsWith("k")) // Handle 'k' for thousands
-                    {
-                        input = input.Substring(0, input.Length - 1);
-                        multiplier = 1000;
-                    }
-                    else if (input.EndsWith("m")) // Handle 'm' for millions
-                    {
-                        input = input.Substring(0, input.Length - 1);
-                        multiplier = 1_000_000;
-                    }
-                    else if (input.EndsWith("b")) // Handle 'b' for billions
-                    {
-                        input = input.Substring(0, input.Length - 1);
-                        multiplier = 1_000_000_000;
-                    }
-
-                    // Remove non-numeric characters (e.g., "vnd", ",", ".")
-                    string sanitizedInput = input.Replace(".", "").Replace(",", "").Replace("vnd", "").Trim();
-
-                    if (decimal.TryParse(sanitizedInput, out decimal amount))
-                    {
-                        amount *= multiplier;
-
-                        // Reject values less than or equal to 0
-                        if (amount <= 0)
-                        {
-                            throw new ArgumentOutOfRangeException("Amount must be greater than 0.");
-                        }
-
-                        dailyBudgetConstraint = (double)amount;
-                        Console.WriteLine("Daily budget constraint updated successfully!");
-                        break;
-                    }
-
-                    throw new FormatException("Invalid numeric format.");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Invalid amount. The value must be greater than 0. Please try again.");
-                    Console.ResetColor();
-                }
-                catch (FormatException)
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Invalid amount format. Please try again (e.g., 30k, 3m, 3b, 30.000).");
-                    Console.ResetColor();
-                }
-            }
+            return exceedances;
         }
 
+        static int GetReminderThreshold()
+        {
+            int defaultThreshold = 5;
+
+            // Ask the user if they want to change the reminder threshold
+            Console.Clear();
+            Console.Write($"Current reminder threshold is {defaultThreshold}. Would you like to change it? (y/n): ");
+            string userInput = Console.ReadLine().Trim().ToLower();
+
+            if (userInput == "y" || userInput == "yes")
+            {
+                // Allow the user to input a new threshold
+                Console.Write($"Enter the number of exceedances to trigger a reminder (default: {defaultThreshold}): ");
+
+                if (int.TryParse(Console.ReadLine(), out int threshold) && threshold > 0)
+                {
+                    return threshold;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input. Using default threshold of 5.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Using default threshold of 5.");
+            }
+
+            return defaultThreshold;
+        }
         static void DrawPlantGrowth(string growthStage)
         {
             Console.WriteLine();
@@ -480,7 +414,6 @@ namespace PersonalFinanceApp
         static Gameprogress UpdateGameProgress(string gamefilepath, double expChange, double healthChange)
         {
             var progress = LoadLatestGameProgress(gamefilepath);
-
             // Update EXP and Health
             progress.EXP += expChange;
             progress.Health = (int)Math.Clamp(progress.Health + healthChange, 0, 100);
@@ -492,25 +425,7 @@ namespace PersonalFinanceApp
             if (progress.EXP >= 20 && progress.Stage == "Sapling Stage")
                 progress.Stage = "Mature Stage";
 
-            // Check if max level and stage reached
-            if (progress.Stage == "Mature Stage" && progress.EXP >= 30)
-            {
-                // Parse Trees (CSV) into a List<string>
-                var trees = string.IsNullOrEmpty(progress.Trees)
-                    ? new List<string>()
-                    : progress.Trees.Split(',').ToList();
 
-                trees.Add($"Tree {trees.Count + 1}: Mature");
-
-                // Serialize the updated list back into a CSV string
-                progress.Trees = string.Join(",", trees);
-
-                // Reset for a new tree
-                progress.EXP = 0;
-                progress.Stage = "Seed Stage";
-            }
-
-            SaveGameFile(gamefilepath, progress);
             return progress;
         }
         static Gameprogress LoadLatestGameProgress(string gamefilepath)
@@ -531,18 +446,75 @@ namespace PersonalFinanceApp
         static void DisplayTreeStatus(Gameprogress progress)
         {
             // Parse trees from CSV (comma-separated values)
-            var trees = string.IsNullOrEmpty(progress.Trees)
-                ? new List<string>()
-                : progress.Trees.Split(',').ToList();
-
+            var trees = progress.Trees;
+            int numberOfLines = trees / 5;
+            int numberTreeOfLastLine = trees % 5;
             // Display trees in a grid format (up to 5 per row)
             int count = 0;
-            foreach (var tree in trees)
+            string treeFirstLine = "";
+            string tree2ndLine = "";
+            string tree3rdLine = "";
+            string tree4thLine = "";
+            string tree5thLine = "";
+            string tree6thLine = "";
+            string tree7thLine = "";
+            for (int line = 0; line < numberOfLines; line++)
             {
-                Console.Write($"| {tree} ");
-                count++;
-                if (count % 5 == 0) Console.WriteLine("|"); // New line after 5 trees
+                treeFirstLine = "";
+                tree2ndLine = "";
+                tree3rdLine = "";
+                tree4thLine = "";
+                tree5thLine = "";
+                tree6thLine = "";
+                tree7thLine = "";
+                for (int i = 0; i < 5; i++)
+                {
+                    treeFirstLine += @"   \|/   ";
+                    tree2ndLine += @"  --*--  ";
+                    tree3rdLine += "   /|\\   ";
+                    tree4thLine += "    |    ";
+                    tree5thLine += @"   /|\   ";
+                    tree6thLine += @"  / | \  ";
+                    tree7thLine += @" /  |  \ ";
+                }
+
+
+                Console.WriteLine(treeFirstLine);
+                Console.WriteLine(tree2ndLine);
+                Console.WriteLine(tree3rdLine);
+                Console.WriteLine(tree4thLine);
+                Console.WriteLine(tree5thLine);
+                Console.WriteLine(tree6thLine);
+                Console.WriteLine(tree7thLine);
             }
+            treeFirstLine = "";
+            tree2ndLine = "";
+            tree3rdLine = "";
+            tree4thLine = "";
+            tree5thLine = "";
+            tree6thLine = "";
+            tree7thLine = "";
+            for (int i = 0; i < numberTreeOfLastLine; i++)
+            {
+                treeFirstLine += @"   \|/   ";
+                tree2ndLine += @"  --*--  ";
+                tree3rdLine += "   /|\\   ";
+                tree4thLine += "    |    ";
+                tree5thLine += @"   /|\   ";
+                tree6thLine += @"  / | \  ";
+                tree7thLine += @" /  |  \ ";
+            }
+
+
+            Console.WriteLine(treeFirstLine);
+            Console.WriteLine(tree2ndLine);
+            Console.WriteLine(tree3rdLine);
+            Console.WriteLine(tree4thLine);
+            Console.WriteLine(tree5thLine);
+            Console.WriteLine(tree6thLine);
+            Console.WriteLine(tree7thLine);
+
+
 
             if (count % 5 != 0) Console.WriteLine("|"); // Close the last row if incomplete
 
@@ -578,7 +550,7 @@ namespace PersonalFinanceApp
             public double EXP { get; set; }
             public int Health { get; set; }    // Health is an integer
             public string Stage { get; set; }
-            public string Trees { get; set; } // Comma-separated list of trees
+            public int Trees { get; set; } // Comma-separated list of trees
         }
         static void Home_ShowReminder(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
         {
@@ -858,6 +830,27 @@ namespace PersonalFinanceApp
                             Session = debit.Session, // Directly map Session from Debit record
                             Amount = debit.Amount,
                             Note = debit.Note
+                        });
+                    }
+                }
+            }
+            //Load DailyBudgetConstraints.csv
+            if (File.Exists("DailyBudgetConstraints.csv"))
+            {
+                using (var reader = new StreamReader("DailyBudgetConstraints.csv"))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                {
+                    // Rename the variable to avoid conflict with the type name
+                    var dailyBudgetConstraints = csv.GetRecords<DailyBudgetConstraint>().ToList();
+
+                    foreach (var constraintRecord in dailyBudgetConstraints) // Use a distinct name for loop variable
+                    {
+                        transactions.Add(new Transaction
+                        {
+                            Constraint = constraintRecord.Constraint, // Assuming property name matches the class
+                            OverSpendLimit = constraintRecord.OverSpendLimit, // Adjust based on property naming
+                            Month = constraintRecord.Month,
+                            Year = constraintRecord.Year
                         });
                     }
                 }
