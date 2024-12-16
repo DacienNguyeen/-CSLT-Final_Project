@@ -4,10 +4,6 @@ using System.Text.RegularExpressions;
 using CsvHelper.Configuration;
 using CsvHelper;
 using Spectre.Console;
-using static System.Net.Mime.MediaTypeNames;
-using MathNet.Numerics.Statistics;
-using Accord.Statistics.Models.Regression;
-using Accord.Statistics.Models.Regression.Linear;
 
 namespace PersonalFinanceApp
 {
@@ -67,6 +63,15 @@ namespace PersonalFinanceApp
             public string Note { get; set; }
 
         }
+
+        public class Gameprogress
+        {
+            public double EXP { get; set; }
+            public int Health { get; set; }    // Health is an integer
+            public string Stage { get; set; }
+            public int Trees { get; set; } // Comma-separated list of trees
+        }
+
         public class FinancialEvent
         {
             public DateTime Date { get; set; } // Date of the financial event
@@ -77,6 +82,7 @@ namespace PersonalFinanceApp
         {
             NavigationBar();
         }
+
         static void NavigationBar()
         {
             while (true)
@@ -143,17 +149,195 @@ namespace PersonalFinanceApp
         }
         static void ShowHome()
         {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("=== Home ===");
-            Console.ResetColor();
-            Console.WriteLine("Welcome to the Personal Finance App Home!");
-            Console.WriteLine("\nPress any key to return to the Navigation Bar...");
-            Console.ReadKey();
+            string gamefilepath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Gameprogress.csv");
+            Gameprogress progress = LoadLatestGameProgress(gamefilepath);
+            int reminderThreshold = 3;
+
+            // Load transactions and daily budget constraint
+            var transactions = LoadTransactionsFromFiles();
+            var (dailyBudgetConstraint, _) = LoadDailyBudgetConstraint(DateTime.Now.Month, DateTime.Now.Year);
+
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("=== Wallet Garden Menu ===");
+                Console.ResetColor();
+                Console.WriteLine("1. View Garden Status");
+                Console.WriteLine("2. Change the Reminder Threshold");
+                Console.WriteLine("0. Exit to Main Menu");
+                Console.Write("Enter your choice: ");
+                string choice = Console.ReadLine();
+
+                switch (choice)
+                {
+                    case "1":
+                        progress = UpdateGameProgress(gamefilepath, 1.0, 0); // Example: add 1.0 EXP, no health change
+
+                        // Display updated garden status
+                        DisplayGardenStatus();
+                        Console.WriteLine($"Daily Budget Constraint: {FormatCurrency(dailyBudgetConstraint)}");
+
+                        // Reminder system: Check budget exceedances
+                        int exceedCount = CheckBudgetExceedances(transactions, dailyBudgetConstraint);
+                        if (exceedCount >= reminderThreshold)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine($"Reminder: You have exceeded your daily budget {exceedCount} times this period. Please adjust your spending!");
+                            Console.ResetColor();
+                        }
+
+                        SaveGameFile(gamefilepath, progress); // Save updated progress
+                        Console.WriteLine("Press any key to continue...");
+                        Console.ReadKey();
+                        break;
+
+                    case "2":
+                        reminderThreshold = GetReminderThreshold();
+                        break;
+
+                    case "0":
+                        return;
+
+                    default:
+                        Console.WriteLine("Invalid choice. Please try again.");
+                        Console.ReadKey();
+                        break;
+                }
+            }
         }
 
+        static void DisplayGardenStatus()
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("=== Garden Wallet ===");
+            Console.ResetColor();
 
-        static void Home_ShowReminder(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
+            // Simulate the plant growth stage
+            string[] growthStages = { "Seed Stage", "Sapling Stage", "Mature Stage" };
+            string[] healthStates = { "Healthy", "Moderate", "Ill" };
+            double[] expThresholds = { 5, 10, 15 }; // EXP thresholds for stages
+
+            // Load data from CSV files
+            var transactions = LoadTransactionsFromFiles();
+
+            DateTime today = DateTime.Now.Date;
+
+            // Calculate daily budget constraint
+            double dailyBudgetConstraint = transactions
+                .Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year)
+                .Select(t => t.Amount)
+                .LastOrDefault();
+
+            // Calculate today's expenditure
+            double todaySpending = transactions
+                .Where(t => t.Date.Date == today && t.Flow == "OUT")
+                .Sum(t => t.Amount);
+
+            double income = transactions
+                .Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Flow == "IN" && t.Source == "Income")
+                .Sum(t => t.Amount);
+
+            double loan = transactions
+                .Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Loan" && t.Flow == "OUT")
+                .Sum(t => t.Amount);
+
+            double debit = transactions
+                .Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Debit" && t.Flow == "IN")
+                .Sum(t => t.Amount);
+
+            // Calculate balances and net savings
+            double balance = income - todaySpending; // Based on today's spending
+            double debtBalance = loan - debit;
+            double savings = balance + debtBalance;
+            double savingsPercentage = income > 0 ? (savings / income) * 100 : 0;
+
+            // Daily EXP calculation
+            double exp = 0;
+            if (todaySpending <= dailyBudgetConstraint)
+            {
+                exp = 1.0;
+            }
+            else if (todaySpending <= dailyBudgetConstraint * 1.2)
+            {
+                exp = 0.5;
+            }
+
+            // Monthly Health calculation
+            string healthStatus;
+            if (savingsPercentage > 10)
+            {
+                healthStatus = healthStates[0]; // Healthy
+                exp += 1.0; // Level up bonus
+            }
+            else if (savingsPercentage >= 0)
+            {
+                healthStatus = healthStates[1]; // Moderate
+                exp += 0.5; // Limited EXP
+            }
+            else
+            {
+                healthStatus = healthStates[2]; // Ill
+            }
+
+            // Determine growth stage based on EXP
+            string growthStage = growthStages[0]; // Default to Seed Stage
+            if (exp > expThresholds[1])
+            {
+                growthStage = growthStages[2]; // Mature Stage
+            }
+            else if (exp > expThresholds[0])
+            {
+                growthStage = growthStages[1]; // Sapling Stage
+            }
+
+            // Display results
+            Console.Clear();
+            Console.WriteLine($"Growth Stage: {growthStage}");
+            // Draw the plant growth stage
+            DrawPlantGrowth(growthStage);
+            Console.WriteLine($"Health Status: {healthStatus}");
+            // Display a health bar for health status
+            DrawHealthBar(healthStatus);
+
+            Console.WriteLine($"Total EXP: {exp:F1}");
+            // Display today's total expenditure and net savings
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"\nTotal Expenditure Today: {FormatCurrency(todaySpending)}");
+            //Console.WriteLine($"Net Savings: {FormatCurrency(savings)} ({savingsPercentage:F2}% of income)");
+            Console.ResetColor();
+
+            // Display warning if daily budget exceeded
+            if (todaySpending > dailyBudgetConstraint)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Warning: You have exceeded your daily budget!");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.WriteLine("Good job! Keep going :33");
+            }
+
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Keep tracking your spending to help your plant grow!");
+            Console.ResetColor();
+        }
+
+        static int CheckBudgetExceedances(List<Transaction> transactions, double dailyBudgetConstraint)
+        {
+            // Count the number of days in the last 7 days where spending exceeds the daily budget constraint
+            var exceedances = transactions
+                .Where(t => t.Date >= DateTime.Now.AddDays(-7) && t.Flow == "OUT") // Filter spending in the last 7 days
+                .GroupBy(t => t.Date.Date) // Group transactions by day
+                .Count(g => g.Sum(t => t.Amount) > dailyBudgetConstraint);
+
+            return exceedances;
+        }
+
+        static void Home_ShowReminder(List<Transaction> transactions, int month, int year)
         {
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -162,13 +346,17 @@ namespace PersonalFinanceApp
 
             DateTime today = DateTime.Now.Date;
 
+            // Load the budget constraint and overspending limit
+            (double dailyBudget, int overspendingLimit) = LoadDailyBudgetConstraint(month, year);
+
             // Calculate today's expenditure
             double todayExpenditure = transactions
                 .Where(t => t.Source == "Spending" && t.Date.Date == today)
                 .Sum(t => t.Amount);
 
             // Check overspending occurrences
-            int overspendingCount = CalculateOverspendingCount(transactions, dailyBudget);
+            int overspendingCount = CheckBudgetExceedances(transactions, dailyBudget);
+
             Console.WriteLine($"Daily Budget: {dailyBudget:N0} VND");
             Console.WriteLine($"Today's Expenditure: {todayExpenditure:N0} VND");
 
@@ -187,26 +375,262 @@ namespace PersonalFinanceApp
             Console.Write("Choose an option: ");
         }
 
-        static void ShowHome(List<Transaction> transactions, double dailyBudget, int overspendingLimit)
+        static (double, int) LoadDailyBudgetConstraint(int month, int year)
         {
+            const string fileName = "DailyBudgetConstraints.csv";
+            double dailyBudget = 0;
+            int overspendLimit = 3; // Default
+
+            if (File.Exists(fileName))
+            {
+                var lines = File.ReadAllLines(fileName)
+                    .Skip(1) // Skip header
+                    .Select(line => line.Split(','))
+                    .Where(parts => int.Parse(parts[0]) == month && int.Parse(parts[1]) == year)
+                    .LastOrDefault();
+
+                if (lines != null)
+                {
+                    dailyBudget = double.Parse(lines[2]);
+                    overspendLimit = int.Parse(lines[3]);
+                }
+            }
+            else
+            {
+                Console.WriteLine("DailyBudgetConstraints file not found. Using default values.");
+            }
+
+            return (dailyBudget, overspendLimit);
+        }
+
+        static int GetReminderThreshold()
+        {
+            int defaultThreshold = 3;
+
+            // Ask the user if they want to change the reminder threshold
             Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("=== Home ===");
+            Console.Write($"Current reminder threshold is {defaultThreshold}. Would you like to change it? (y/n): ");
+            string userInput = Console.ReadLine().Trim().ToLower();
+
+            if (userInput == "y" || userInput == "yes")
+            {
+                // Allow the user to input a new threshold
+                Console.Write($"Enter the number of exceedances to trigger a reminder (default: {defaultThreshold}): ");
+
+                if (int.TryParse(Console.ReadLine(), out int threshold) && threshold > 0)
+                {
+                    return threshold;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input. Using default threshold of 3.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Using default threshold of 3.");
+            }
+
+            return defaultThreshold;
+        }
+
+        static void DrawPlantGrowth(string growthStage)
+        {
+            Console.WriteLine();
+            switch (growthStage)
+            {
+                case "Seed Stage":
+                    Console.WriteLine("  (.)");
+                    Console.WriteLine("   | ");
+                    Console.WriteLine(@"  Soil");
+
+                    Console.WriteLine("You poor nigga");
+                    break;
+                case "Sapling Stage":
+                    Console.WriteLine(@"   \|/");
+                    Console.WriteLine("  --*--");
+                    Console.WriteLine("   /|\\");
+                    Console.WriteLine("    | ");
+                    Console.WriteLine(@"   / \");
+
+                    Console.WriteLine("Keep up with your goal!");
+                    break;
+                case "Mature Stage":
+                    Console.WriteLine(@"   \|/");
+                    Console.WriteLine("  --*--");
+                    Console.WriteLine("   /|\\");
+                    Console.WriteLine("    | ");
+                    Console.WriteLine(@"   /|\");
+                    Console.WriteLine(@"  / | \");
+                    Console.WriteLine(@" /  |  \");
+                    Console.WriteLine("Congratulation!");
+                    break;
+            }
+            Console.WriteLine();
+        }
+
+        static void DrawHealthBar(string healthStatus)
+        {
+            Console.WriteLine();
+            Console.Write("Health: ");
+            switch (healthStatus)
+            {
+                case "Healthy":
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("[##########]");
+                    Console.WriteLine("You are healthy, keep going!");
+                    break;
+                case "Moderate":
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("[#####-----]");
+                    Console.WriteLine("Please improve your health TT~TT");
+                    break;
+                case "Ill":
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("[##--------]");
+                    Console.WriteLine("Joke's over, you're dead!");
+                    break;
+            }
             Console.ResetColor();
+            Console.WriteLine();
+        }
 
-            // Gamification introduction
-            Console.WriteLine("Gamify your expense tracking by maintaining a streak.");
-            Console.WriteLine("TODO: Add streak tracking logic using System.DateTime");
+        static Gameprogress UpdateGameProgress(string gamefilepath, double expChange, double healthChange)
+        {
+            var progress = LoadLatestGameProgress(gamefilepath);
+            // Update EXP and Health
+            progress.EXP += expChange;
+            progress.Health = (int)Math.Clamp(progress.Health + healthChange, 0, 100);
 
-            // Call the overspending reminder logic
-            Home_ShowReminder(transactions, dailyBudget, overspendingLimit);
+            // Level up logic
+            if (progress.EXP >= 10 && progress.Stage == "Seed Stage")
+                progress.Stage = "Sapling Stage";
 
-            // Prompt user for the next action
-            Console.WriteLine("\n[1] View Transactions");
-            Console.WriteLine("[2] Add Record");
-            Console.WriteLine("[3] View Budget");
-            Console.WriteLine("[4] Exit");
-            Console.Write("Choose an option: ");
+            if (progress.EXP >= 20 && progress.Stage == "Sapling Stage")
+                progress.Stage = "Mature Stage";
+
+
+            return progress;
+        }
+
+        static Gameprogress LoadLatestGameProgress(string gamefilepath)
+        {
+            if (!File.Exists(gamefilepath))
+            {
+                // Return a default progress if no file exists
+                return new Gameprogress { EXP = 0, Health = 100, Stage = "Seed Stage" };
+            }
+
+            using (var reader = new StreamReader(gamefilepath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                var records = csv.GetRecords<Gameprogress>().ToList();
+                return records.LastOrDefault() ?? new Gameprogress { EXP = 0, Health = 100, Stage = "Seed Stage" };
+            }
+        }
+
+        static void DisplayTreeStatus(Gameprogress progress)
+        {
+            // Parse trees from CSV (comma-separated values)
+            var trees = progress.Trees;
+            int numberOfLines = trees / 5;
+            int numberTreeOfLastLine = trees % 5;
+            // Display trees in a grid format (up to 5 per row)
+            int count = 0;
+            string treeFirstLine = "";
+            string tree2ndLine = "";
+            string tree3rdLine = "";
+            string tree4thLine = "";
+            string tree5thLine = "";
+            string tree6thLine = "";
+            string tree7thLine = "";
+            for (int line = 0; line < numberOfLines; line++)
+            {
+                treeFirstLine = "";
+                tree2ndLine = "";
+                tree3rdLine = "";
+                tree4thLine = "";
+                tree5thLine = "";
+                tree6thLine = "";
+                tree7thLine = "";
+                for (int i = 0; i < 5; i++)
+                {
+                    treeFirstLine += @"   \|/   ";
+                    tree2ndLine += @"  --*--  ";
+                    tree3rdLine += "   /|\\   ";
+                    tree4thLine += "    |    ";
+                    tree5thLine += @"   /|\   ";
+                    tree6thLine += @"  / | \  ";
+                    tree7thLine += @" /  |  \ ";
+                }
+
+
+                Console.WriteLine(treeFirstLine);
+                Console.WriteLine(tree2ndLine);
+                Console.WriteLine(tree3rdLine);
+                Console.WriteLine(tree4thLine);
+                Console.WriteLine(tree5thLine);
+                Console.WriteLine(tree6thLine);
+                Console.WriteLine(tree7thLine);
+            }
+            treeFirstLine = "";
+            tree2ndLine = "";
+            tree3rdLine = "";
+            tree4thLine = "";
+            tree5thLine = "";
+            tree6thLine = "";
+            tree7thLine = "";
+            for (int i = 0; i < numberTreeOfLastLine; i++)
+            {
+                treeFirstLine += @"   \|/   ";
+                tree2ndLine += @"  --*--  ";
+                tree3rdLine += "   /|\\   ";
+                tree4thLine += "    |    ";
+                tree5thLine += @"   /|\   ";
+                tree6thLine += @"  / | \  ";
+                tree7thLine += @" /  |  \ ";
+            }
+
+
+            Console.WriteLine(treeFirstLine);
+            Console.WriteLine(tree2ndLine);
+            Console.WriteLine(tree3rdLine);
+            Console.WriteLine(tree4thLine);
+            Console.WriteLine(tree5thLine);
+            Console.WriteLine(tree6thLine);
+            Console.WriteLine(tree7thLine);
+
+
+
+            if (count % 5 != 0) Console.WriteLine("|"); // Close the last row if incomplete
+
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey();
+        }
+
+        static void SaveGameFile(string gamefilepath, Gameprogress progress)
+        {
+            bool fileExists = File.Exists(gamefilepath);
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = !fileExists
+            };
+
+            using (var writer = new StreamWriter(gamefilepath, append: true))
+            using (var csvWriter = new CsvWriter(writer, config))
+            {
+                if (!fileExists)
+                {
+                    csvWriter.WriteHeader<Gameprogress>();
+                    csvWriter.NextRecord();
+                }
+
+                csvWriter.WriteRecord(progress);
+                csvWriter.NextRecord();
+            }
+
+            Console.WriteLine("Game progress saved successfully.");
         }
 
         static int CalculateOverspendingCount(List<Transaction> transactions, double dailyBudget)
@@ -1225,8 +1649,7 @@ namespace PersonalFinanceApp
             Console.WriteLine("5. Optional Spending (eating out, movie ticket, ...)");
             Console.WriteLine("6. Healthcare"); // Important
             Console.WriteLine("7. Education"); // Investment
-            Console.WriteLine("8. Savings & Investments"); // Future-oriented
-            Console.WriteLine("9. Debt Payments"); // Financial responsibility
+            Console.WriteLine("8. Other");
 
             do
             {
@@ -1257,10 +1680,7 @@ namespace PersonalFinanceApp
                             category = "Education";
                             break;
                         case 8:
-                            category = "Savings & Investments";
-                            break;
-                        case 9:
-                            category = "Debt Payments";
+                            category = "Other";
                             break;
                         default:
                             Console.WriteLine("Invalid selection. Please choose from 1 to 9.");
