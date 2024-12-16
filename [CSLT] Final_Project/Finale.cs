@@ -1601,7 +1601,7 @@ namespace PersonalFinanceApp
         static string GetMethod()
         {
             string method = "";
-            Console.WriteLine("Spend by (IN three following types: Banking, Cash or E-Wallet)");
+            Console.WriteLine("Spend/Receive by (IN three following types: Banking, Cash or E-Wallet)");
             Console.WriteLine("1. Banking");
             Console.WriteLine("2. Cash");
             Console.WriteLine("3. E-Wallet");
@@ -2677,7 +2677,7 @@ namespace PersonalFinanceApp
                 {
                     foreach (var eventDate in futureEvents.Select(e => e.Date).Distinct().OrderBy(d => d))
                     {
-                        int daysToEvent = (eventDate - today).Days;
+                        int daysToEvent = (eventDate - today).Days + 1;
                         double dailyExpenditureTotal = daysToEvent * dailyAverageExpenditure;
 
                         double eventImpact = futureEvents
