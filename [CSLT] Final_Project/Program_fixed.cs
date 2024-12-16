@@ -265,15 +265,12 @@
 //                growthStage = growthStages[1]; // Sapling Stage
 //            }
 
-//            // Display results
-//            Console.Clear();
-//            Console.WriteLine($"Growth Stage: {growthStage}");
-//            // Draw the plant growth stage
-//            DrawPlantGrowth(growthStage);
-//            Console.WriteLine($"Health Status: {healthStatus}");
-//            // Display a health bar for health status
-//            DrawHealthBar(healthStatus);
-//            Console.WriteLine($"Daily Spending: {FormatCurrency(dailySpending)} / {FormatCurrency(dailyBudgetConstraint)}");
+            double dailyBudgetConstraint = transactions.Where(t => t.Month == DateTime.Now.Month && t.Year == DateTime.Now.Year).Sum(t => t.Constraint);
+            double dailySpending = transactions.Where(t => t.Date.Date == DateTime.Now.Date && t.Flow == "OUT").Sum(t => t.Amount);
+            double income = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Flow == "IN" && t.Source == "Income").Sum(t => t.Amount);
+            double monthlySpending = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Flow == "OUT").Sum(t => t.Amount);
+            double loan = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Loan" && t.Flow == "OUT").Sum(t => t.Amount);
+            double debit = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Debit" && t.Flow == "IN").Sum(t => t.Amount);
 
 //            // Display warning if daily budget exceeded
 //            if (dailySpending > dailyBudgetConstraint)
