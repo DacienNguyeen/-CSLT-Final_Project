@@ -3,8 +3,6 @@ using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Spectre.Console;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using Figgle;
 namespace PersonalFinanceApp
 {
     class TestHome
@@ -67,7 +65,7 @@ namespace PersonalFinanceApp
 
         }
 
-        static void Main34(string[] args)
+        static void Main1(string[] args)
         {
             NavigationBar();
         }
@@ -137,6 +135,9 @@ namespace PersonalFinanceApp
 
         static void ShowHome()
         {
+            string gamefilepath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Gameprogress.csv");
+            Gameprogress progress = LoadLatestGameProgress(gamefilepath);
+            int reminderThreshold = 5;
             while (true)
             {
                 Console.Clear();
@@ -145,7 +146,8 @@ namespace PersonalFinanceApp
                 Console.ResetColor();
                 Console.WriteLine("1. View Garden Status");
                 Console.WriteLine("2. Update Daily Constraint");
-                Console.WriteLine("3. Exit to Main Menu");
+                Console.WriteLine("3. Change the Reminder Threshold");
+                Console.WriteLine("4. Exit to Main Menu");
                 Console.Write("Enter your choice: ");
                 string choice = Console.ReadLine();
                 double exp = 0;
@@ -164,12 +166,12 @@ namespace PersonalFinanceApp
                         }
                         else
                         {
+                            progress = UpdateGameProgress(gamefilepath, 1.0, 0); // Example: add 1.0 EXP, no health change
                             DisplayGardenStatus();
+                            DisplayTreeStatus(progress); // Display updated garden status
 
-                            // Reminder system: Check if budget exceeded multiple times
+                            // Reminder system: Check budget exceedances
                             int exceedCount = CheckBudgetExceedances();
-                            int reminderThreshold = GetReminderThreshold(); // Retrieve user-defined threshold
-
                             if (exceedCount >= reminderThreshold)
                             {
                                 Console.ForegroundColor = ConsoleColor.Yellow;
@@ -180,13 +182,14 @@ namespace PersonalFinanceApp
                         break;
                     case "2":
                         UpdateDailyBudgetConstraint();
-                        string gamefilepath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Gameprogress.csv");
-                        string Gamefilename = "Gameprogress.csv";
-                        string Gamefilepath = Path.Combine(gamefilepath, Gamefilename);
-                        SaveGameFile(gamefilepath, exp, healthStatus, growthStage);
+                        SaveGameFile(gamefilepath, progress); // Save updated progress
+                        Console.WriteLine("Daily constraint updated. Press any key to continue...");
                         Console.ReadKey();
                         break;
                     case "3":
+                        reminderThreshold = GetReminderThreshold();
+                        break;
+                    case "4":
                         return;
                     default:
                         Console.WriteLine("Invalid choice. Please try again.");
@@ -210,10 +213,10 @@ namespace PersonalFinanceApp
 
         static int GetReminderThreshold()
         {
-            Console.Clear();
             int defaultThreshold = 5;
 
             // Ask the user if they want to change the reminder threshold
+            Console.Clear();
             Console.Write($"Current reminder threshold is {defaultThreshold}. Would you like to change it? (y/n): ");
             string userInput = Console.ReadLine().Trim().ToLower();
 
@@ -254,10 +257,10 @@ namespace PersonalFinanceApp
             var transactions = LoadTransactionsFromFiles();
 
             double dailySpending = transactions.Where(t => t.Date.Date == DateTime.Now.Date && t.Flow == "OUT").Sum(t => t.Amount);
-            double income = transactions.Where(t => t.Flow == "IN" && t.Source == "Income").Sum(t => t.Amount);
+            double income = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Flow == "IN" && t.Source == "Income").Sum(t => t.Amount);
             double monthlySpending = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Flow == "OUT").Sum(t => t.Amount);
-            double loan = transactions.Where(t => t.Source == "Loan" && t.Flow == "OUT").Sum(t => t.Amount);
-            double debit = transactions.Where(t => t.Source == "Debit" && t.Flow == "IN").Sum(t => t.Amount);
+            double loan = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Loan" && t.Flow == "OUT").Sum(t => t.Amount);
+            double debit = transactions.Where(t => t.Date.Month == DateTime.Now.Month && t.Date.Year == DateTime.Now.Year && t.Source == "Debit" && t.Flow == "IN").Sum(t => t.Amount);
 
             double balance = income - monthlySpending;
             double debtBalance = loan - debit;
@@ -328,9 +331,6 @@ namespace PersonalFinanceApp
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("Keep tracking your spending to help your plant grow!");
             Console.ResetColor();
-
-            Console.WriteLine("\nPress any key to return to the menu...");
-            Console.ReadKey();
         }
 
         static void UpdateDailyBudgetConstraint()
@@ -457,63 +457,111 @@ namespace PersonalFinanceApp
             Console.ResetColor();
             Console.WriteLine();
         }
-        static void SaveGameFile(string gamefilepath, double exp, string healthStatus, string growthStage)
+        static Gameprogress UpdateGameProgress(string gamefilepath, double expChange, double healthChange)
         {
-            try
+            var progress = LoadLatestGameProgress(gamefilepath);
+
+            // Update EXP and Health
+            progress.EXP += expChange;
+            progress.Health = (int)Math.Clamp(progress.Health + healthChange, 0, 100);
+
+            // Level up logic
+            if (progress.EXP >= 10 && progress.Stage == "Seed Stage")
+                progress.Stage = "Sapling Stage";
+
+            if (progress.EXP >= 20 && progress.Stage == "Sapling Stage")
+                progress.Stage = "Mature Stage";
+
+            // Check if max level and stage reached
+            if (progress.Stage == "Mature Stage" && progress.EXP >= 30)
             {
-                // Ensure the file exists, create it if not
-                if (!File.Exists(gamefilepath))
+                // Parse Trees (CSV) into a List<string>
+                var trees = string.IsNullOrEmpty(progress.Trees)
+                    ? new List<string>()
+                    : progress.Trees.Split(',').ToList();
+
+                trees.Add($"Tree {trees.Count + 1}: Mature");
+
+                // Serialize the updated list back into a CSV string
+                progress.Trees = string.Join(",", trees);
+
+                // Reset for a new tree
+                progress.EXP = 0;
+                progress.Stage = "Seed Stage";
+            }
+
+            SaveGameFile(gamefilepath, progress);
+            return progress;
+        }
+        static Gameprogress LoadLatestGameProgress(string gamefilepath)
+        {
+            if (!File.Exists(gamefilepath))
+            {
+                // Return a default progress if no file exists
+                return new Gameprogress { EXP = 0, Health = 100, Stage = "Seed Stage" };
+            }
+
+            using (var reader = new StreamReader(gamefilepath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                var records = csv.GetRecords<Gameprogress>().ToList();
+                return records.LastOrDefault() ?? new Gameprogress { EXP = 0, Health = 100, Stage = "Seed Stage" };
+            }
+        }
+        static void DisplayTreeStatus(Gameprogress progress)
+        {
+            // Parse trees from CSV (comma-separated values)
+            var trees = string.IsNullOrEmpty(progress.Trees)
+                ? new List<string>()
+                : progress.Trees.Split(',').ToList();
+
+            // Display trees in a grid format (up to 5 per row)
+            int count = 0;
+            foreach (var tree in trees)
+            {
+                Console.Write($"| {tree} ");
+                count++;
+                if (count % 5 == 0) Console.WriteLine("|"); // New line after 5 trees
+            }
+
+            if (count % 5 != 0) Console.WriteLine("|"); // Close the last row if incomplete
+
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey();
+        }
+        static void SaveGameFile(string gamefilepath, Gameprogress progress)
+        {
+            bool fileExists = File.Exists(gamefilepath);
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = !fileExists
+            };
+
+            using (var writer = new StreamWriter(gamefilepath, append: true))
+            using (var csvWriter = new CsvWriter(writer, config))
+            {
+                if (!fileExists)
                 {
-                    using (File.Create(gamefilepath)) { }
+                    csvWriter.WriteHeader<Gameprogress>();
+                    csvWriter.NextRecord();
                 }
 
-                // Create a list with the new game progress
-                List<Gameprogress> gameprogress = new List<Gameprogress>
-                {
-                    new Gameprogress
-                    {
-                        EXP = exp,
-                        Health = healthStatus,
-                        Stage = growthStage,
-                    }
-                };
-
-                // CSV configuration to ensure headers are written
-                var configGameprogresses = new CsvConfiguration(CultureInfo.InvariantCulture)
-                {
-                    HasHeaderRecord = true
-                };
-
-                // Open the file and write to it
-                using (StreamWriter streamWriter = new StreamWriter(gamefilepath, true))
-                using (CsvWriter csvWriter = new CsvWriter(streamWriter, configGameprogresses))
-                {
-                    // Write the header if the file is empty
-                    if (new FileInfo(gamefilepath).Length == 0)
-                    {
-                        csvWriter.WriteHeader<Gameprogress>();
-                        csvWriter.NextRecord();  // Move to the next line after header
-                    }
-
-                    // Write the records to the CSV file
-                    csvWriter.WriteRecords(gameprogress);
-                }
-
-                Console.WriteLine("Data written to CSV successfully.");
+                csvWriter.WriteRecord(progress);
+                csvWriter.NextRecord();
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An error occurred: {ex.Message}");
-            }
+
+            Console.WriteLine("Game progress saved successfully.");
         }
         public class Gameprogress
         {
-            public double EXP;
-            public string Health;
-            public string Stage;
+            public double EXP { get; set; }
+            public int Health { get; set; }    // Health is an integer
+            public string Stage { get; set; }
+            public string Trees { get; set; } // Comma-separated list of trees
         }
-            static void ShowTransactions()
-            {
+        static void ShowTransactions()
+        {
             while (true)
             {
                 Console.Clear();
